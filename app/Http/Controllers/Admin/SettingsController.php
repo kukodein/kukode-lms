@@ -31,7 +31,7 @@ class SettingsController extends Controller
     public function page($page)
     {
         removeContentLocale();
-
+        $request = request();
         $this->authorize('admin_settings_' . $page);
 
         $settings = Setting::where('page', $page)
@@ -41,14 +41,22 @@ class SettingsController extends Controller
         foreach ($settings as $setting) {
             $setting->value = json_decode($setting->value, true);
         }
+        // if (!empty($request->get('name'))) {
+            // $name = $request->get('name');
+        // }
 
         $data = [
             'pageTitle' => trans('admin/main.settings_title'),
-            'settings' => $settings
+            'settings' => $settings,
+            // 'name' => $name,
         ];
 
         if ($page == 'notifications') {
             $data['notificationTemplates'] = NotificationTemplate::all();
+        }
+
+        if ($page == 'personalization') {
+            $data['name'] = 'page_background';
         }
 
         if ($page == 'financial') {
@@ -92,7 +100,7 @@ class SettingsController extends Controller
             'values' => $values,
             'name' => $name
         ];
-
+        // dd($name);
         return view('admin.settings.personalization', $data);
     }
 

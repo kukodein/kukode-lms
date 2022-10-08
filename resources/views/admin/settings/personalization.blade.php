@@ -33,7 +33,6 @@
                             <ul class="nav nav-pills" id="myTab3" role="tablist">
                                 @foreach($items as $item)
                                     <li class="nav-item">
-					@php if(isset($name)){$name = $name;}else{$name = '';} @endphp
                                         <a class="nav-link {{ ($item == $name) ? 'active' : '' }}" href="/admin/settings/personalization/{{ $item }}">{{ trans('admin/main.'.$item) }}</a>
                                     </li>
                                 @endforeach
