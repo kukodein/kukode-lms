@@ -60,7 +60,7 @@ class RegisterController extends Controller
 
         $user = User::create([
             'role_name' => Role::$user,
-            'role_id' => Role::getUserRoleId(), //normal user
+            'role_id' => Role::getUserRoleId(),//normal user
             $username => $data[$username],
             'full_name' => $data['full_name'],
             'status' => User::$pending,
@@ -154,7 +154,7 @@ class RegisterController extends Controller
 
         $verificationController = new VerificationController();
         $checkConfirmed = $verificationController->checkConfirmed($user, $username, $value);
-        //        $checkConfirmed['status'] = 'send';
+//        $checkConfirmed['status'] = 'send';
         $referralCode = $request->get('referral_code', null);
 
         if ($checkConfirmed['status'] == 'send') {
@@ -164,6 +164,7 @@ class RegisterController extends Controller
             }
 
             return apiResponse2('1', 'registered', trans('auth.registered'));
+
         } elseif ($checkConfirmed['status'] == 'verified') {
 
             return 'registerController line 231';
@@ -234,7 +235,9 @@ class RegisterController extends Controller
                     return apiResponse2(0, 'go_step_2', trans('auth.go_step_2'), [
                         'user_id' => $userCase->id
                     ]);
+
                 }
+
             }
 
 
@@ -243,7 +246,7 @@ class RegisterController extends Controller
 
             $user = User::create([
                 'role_name' => Role::$user,
-                'role_id' => Role::getUserRoleId(), //normal user
+                'role_id' => Role::getUserRoleId(),//normal user
                 $username => $data[$username],
                 //    'full_name' => $data['full_name'],
                 'status' => User::$pending,
@@ -264,6 +267,7 @@ class RegisterController extends Controller
                 'user_id' => $user->id
 
             ]);
+
         } elseif ($step == 2) {
 
             validateParam($request->all(), [
@@ -282,6 +286,8 @@ class RegisterController extends Controller
             $verificationController = new VerificationController();
             $ee = $user->email ?? $user->mobile;
             return $verificationController->confirmCode($request, $ee);
+
+
         } elseif ($step == 3) {
             validateParam($request->all(), [
                 'user_id' => 'required|exists:users,id',
@@ -299,24 +305,25 @@ class RegisterController extends Controller
                 } catch (\Exception $e) {
                 }
             }
+            
+       //  \   dd('f') ;
+         //   $token = auth('api')->login($user);
+         $token = auth('api')->tokenById($user->id);
 
-            //  \   dd('f') ;
-            //   $token = auth('api')->login($user);
-            $token = auth('api')->tokenById($user->id);
-
-            //     $token=  auth('api')->refresh();
-            //  dd($token) ;
-
-            // $token = auth('api')->attempt(["email"=>"zohreh_daeian@yahoo.com" ,"password"//=>"1234567"
-            //]) ;
-
-            //  $token = \Tymon\JWTAuth\Facades\JWTAuth::fromUser($user);
+       //     $token=  auth('api')->refresh();
+          //  dd($token) ;
+       
+// $token = auth('api')->attempt(["email"=>"zohreh_daeian@yahoo.com" ,"password"//=>"1234567"
+    //]) ;
+  
+     //  $token = \Tymon\JWTAuth\Facades\JWTAuth::fromUser($user);
 
             $data['token'] = $token;
             $data['user_id'] = $user->id;
             return apiResponse2(1, 'login', trans('auth.login'), $data);
 
             return apiResponse2('1', 'stored', trans('public.stored'));
+
         }
         abort(404);
 
@@ -335,7 +342,7 @@ class RegisterController extends Controller
 
         $verificationController = new VerificationController();
         $checkConfirmed = $verificationController->checkConfirmed($user, $username, $value);
-        //        $checkConfirmed['status'] = 'send';
+//        $checkConfirmed['status'] = 'send';
         $referralCode = $request->get('referral_code', null);
 
         if ($checkConfirmed['status'] == 'send') {
@@ -344,6 +351,7 @@ class RegisterController extends Controller
                 //   session()->put('referralCode', $referralCode);
             }
             return apiResponse2('1', 'registered', trans('auth.registered'));
+
         } elseif ($checkConfirmed['status'] == 'verified') {
 
             return 'registerController line 231';
@@ -367,4 +375,6 @@ class RegisterController extends Controller
                 : redirect($this->redirectPath());
         }
     }
+
+
 }
