@@ -209,7 +209,7 @@ class RegisterController extends Controller
                 'password_confirmation' => 'required|same:password',
             ];
 
-            $this->validateParam($data, $rules);
+            validateParam($data, $rules);
             if ($username == 'mobile') {
                 $data[$username] = ltrim($data['country_code'], '+') . ltrim($data[$username], '0');
                 //  $data[$username]='+989386376960' ;
