@@ -33,10 +33,10 @@ use App\Http\Controllers\Api\Config\ConfigController;
 //     return config('app.url') . $path;
 // }
 
-function getPrice($price)
-{
-    return $price ? (ConfigController::get()['currency']['sign'] . (number_format($price, 2, ".", "") + 0)) : $price;
-}
+// function getPrice($price)
+// {
+//     return $price ? (ConfigController::get()['currency']['sign'] . (number_format($price, 2, ".", "") + 0)) : $price;
+// }
 
 function apiAuth()
 {
