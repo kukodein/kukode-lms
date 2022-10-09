@@ -31,7 +31,6 @@
                             <ul class="nav nav-pills" id="myTab3" role="tablist">
                                 <?php $__currentLoopData = $items; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                     <li class="nav-item">
-					<?php if(isset($name)){$name = $name;}else{$name = '';} ?>
                                         <a class="nav-link <?php echo e(($item == $name) ? 'active' : ''); ?>" href="/admin/settings/personalization/<?php echo e($item); ?>"><?php echo e(trans('admin/main.'.$item)); ?></a>
                                     </li>
                                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>

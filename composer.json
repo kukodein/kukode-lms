@@ -58,6 +58,7 @@
         "ssheduardo/redsys-laravel": "~1.4.0",
         "stripe/stripe-php": "^7.76",
         "twilio/sdk": "^6.17",
+        "tymon/jwt-auth": "^1.0",
         "tzsk/payu": "^5.0",
         "unicodeveloper/laravel-paystack": "1.0.*",
         "unisharp/laravel-filemanager": "^2.1",

@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="/assets/default/vendors/select2/select2.min.css">
     <link rel="stylesheet" href="/assets/default/vendors/bootstrap-tagsinput/bootstrap-tagsinput.min.css">
     <link rel="stylesheet" href="/assets/vendors/summernote/summernote-bs4.min.css">
-    <link href="/assets/default/vendors/sortable/jquery-ui.min.css"/>
     <style>
         .bootstrap-timepicker-widget table td input {
             width: 35px !important;
@@ -53,7 +52,7 @@
                                                     <label class="input-label">{{ trans('auth.language') }}</label>
                                                     <select name="locale" class="form-control {{ !empty($webinar) ? 'js-edit-content-locale' : '' }}">
                                                         @foreach($userLanguages as $lang => $language)
-                                                            <option value="{{ $lang }}" @if(mb_strtolower(request()->get('locale', app()->getLocale())) == mb_strtolower($lang)) selected @endif>{{ $language }}</option>
+                                                            <option value="{{ $lang }}" @if(request()->get('locale', app()->getLocale()) == $lang) selected @endif>{{ $language }}</option>
                                                         @endforeach
                                                     </select>
                                                     @error('locale')
@@ -72,7 +71,7 @@
                                                 <select name="type" class="custom-select @error('type')  is-invalid @enderror">
                                                     <option value="webinar" @if((!empty($webinar) and $webinar->isWebinar()) or old('type') == \App\Models\Webinar::$webinar) selected @endif>{{ trans('webinars.webinar') }}</option>
                                                     <option value="course" @if((!empty($webinar) and $webinar->isCourse()) or old('type') == \App\Models\Webinar::$course) selected @endif>{{ trans('product.video_course') }}</option>
-                                                    <option>{{ trans('product.text_course') }} (Paid plugin)</option>
+                                                    <option value="text_lesson" @if((!empty($webinar) and $webinar->isTextCourse()) or old('type') == \App\Models\Webinar::$textLesson) selected @endif>{{ trans('product.text_course') }}</option>
                                                 </select>
 
                                                 @error('type')
@@ -86,16 +85,6 @@
                                                 <label class="input-label">{{ trans('public.title') }}</label>
                                                 <input type="text" name="title" value="{{ !empty($webinar) ? $webinar->title : old('title') }}" class="form-control @error('title')  is-invalid @enderror" placeholder=""/>
                                                 @error('title')
-                                                <div class="invalid-feedback">
-                                                    {{ $message }}
-                                                </div>
-                                                @enderror
-                                            </div>
-
-                                            <div class="form-group mt-15">
-                                                <label class="input-label">{{ trans('update.points') }}</label>
-                                                <input type="text" name="points" value="{{ !empty($webinar) ? $webinar->points : old('points') }}" class="form-control @error('points')  is-invalid @enderror" placeholder="Empty means inactive this mode"/>
-                                                @error('points')
                                                 <div class="invalid-feedback">
                                                     {{ $message }}
                                                 </div>
@@ -127,14 +116,11 @@
                                             <div class="form-group mt-15 ">
                                                 <label class="input-label d-block">{{ trans('admin/main.select_a_instructor') }}</label>
 
-                                                <select name="teacher_id" data-search-option="just_teacher_role" class="form-control search-user-select2"
-                                                        data-placeholder="{{ trans('public.select_a_teacher') }}"
-                                                >
-                                                    @if(!empty($webinar))
-                                                        <option value="{{ $webinar->teacher->id }}" selected>{{ $webinar->teacher->full_name }}</option>
-                                                    @else
-                                                        <option selected disabled>{{ trans('public.select_a_teacher') }}</option>
-                                                    @endif
+                                                <select name="teacher_id" class="form-control select2 @error('teacher_id')  is-invalid @enderror" data-placeholder="{{ trans('public.search_instructor') }}">
+                                                    <option {{ !empty($webinar) ? '' : 'selected' }} disabled>{{ trans('public.select_a_teacher') }}</option>
+                                                    @foreach($teachers as $teacher)
+                                                        <option value="{{ $teacher->id }}" @if(!empty($webinar) and $webinar->teacher_id == $teacher->id) selected @endif>{{ $teacher->full_name }}</option>
+                                                    @endforeach
                                                 </select>
 
                                                 @error('teacher_id')
@@ -201,32 +187,12 @@
                                                 </div>
                                             </div>
 
-                                            <div class="form-group mt-25">
+                                            <div class="form-group mt-15">
                                                 <label class="input-label">{{ trans('public.demo_video') }} ({{ trans('public.optional') }})</label>
-
-
-                                                <div class="">
-                                                    <label class="input-label font-12">{{ trans('public.source') }}</label>
-                                                    <select name="video_demo_source"
-                                                            class="js-video-demo-source form-control"
-                                                    >
-                                                        @foreach(\App\Models\Webinar::$videoDemoSource as $source)
-                                                            <option value="{{ $source }}" @if(!empty($webinar) and $webinar->video_demo_source == $source) selected @endif>{{ trans('update.file_source_'.$source) }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                            </div>
-
-                                            <div class="form-group mt-0">
-                                                <label class="input-label font-12">{{ trans('update.path') }}</label>
-                                                <div class="input-group js-video-demo-path-input">
+                                                <div class="input-group">
                                                     <div class="input-group-prepend">
-                                                        <button type="button" class="js-video-demo-path-upload input-group-text admin-file-manager {{ (empty($webinar) or empty($webinar->video_demo_source) or $webinar->video_demo_source == 'upload') ? '' : 'd-none' }}" data-input="demo_video" data-preview="holder">
+                                                        <button type="button" class="input-group-text admin-file-manager" data-input="demo_video" data-preview="holder">
                                                             <i class="fa fa-upload"></i>
-                                                        </button>
-
-                                                        <button type="button" class="js-video-demo-path-links rounded-left input-group-text input-group-text-rounded-left  {{ (empty($webinar) or empty($webinar->video_demo_source) or $webinar->video_demo_source == 'upload') ? 'd-none' : '' }}">
-                                                            <i class="fa fa-link"></i>
                                                         </button>
                                                     </div>
                                                     <input type="text" name="video_demo" id="demo_video" value="{{ !empty($webinar) ? $webinar->video_demo : old('video_demo') }}" class="form-control @error('video_demo')  is-invalid @enderror"/>
@@ -264,7 +230,7 @@
 
                                                 <div class="form-group mt-15 js-capacity {{ (!empty(old('type')) and old('type') != \App\Models\Webinar::$webinar) ? 'd-none' : '' }}">
                                                     <label class="input-label">{{ trans('public.capacity') }}</label>
-                                                    <input type="number" name="capacity" value="{{ !empty($webinar) ? $webinar->capacity : old('capacity') }}" class="form-control @error('capacity')  is-invalid @enderror"/>
+                                                    <input type="text" name="capacity" value="{{ !empty($webinar) ? $webinar->capacity : old('capacity') }}" class="form-control @error('capacity')  is-invalid @enderror"/>
                                                     @error('capacity')
                                                     <div class="invalid-feedback">
                                                         {{ $message }}
@@ -284,7 +250,7 @@
                                                                         <i class="fa fa-calendar-alt "></i>
                                                                     </span>
                                                                 </div>
-                                                                <input type="text" name="start_date" value="{{ (!empty($webinar) and $webinar->start_date) ? dateTimeFormat($webinar->start_date, 'Y-m-d H:i', false, false, $webinar->timezone) : old('start_date') }}" class="form-control @error('start_date')  is-invalid @enderror datetimepicker" aria-describedby="dateInputGroupPrepend"/>
+                                                                <input type="text" name="start_date" value="{{ (!empty($webinar) and $webinar->start_date) ? dateTimeFormat($webinar->start_date,'Y-m-d H:i') : old('start_date') }}" class="form-control @error('start_date')  is-invalid @enderror datetimepicker" aria-describedby="dateInputGroupPrepend"/>
                                                                 @error('start_date')
                                                                 <div class="invalid-feedback">
                                                                     {{ $message }}
@@ -317,30 +283,6 @@
                                                 </div>
                                             </div>
 
-                                            @if(getFeaturesSettings('timezone_in_create_webinar'))
-                                                @php
-                                                    $selectedTimezone = getGeneralSettings('default_time_zone');
-
-                                                    if (!empty($webinar) and !empty($webinar->timezone)) {
-                                                        $selectedTimezone = $webinar->timezone;
-                                                    }
-                                                @endphp
-
-                                                <div class="form-group">
-                                                    <label class="input-label">{{ trans('update.timezone') }}</label>
-                                                    <select name="timezone" class="form-control select2" data-allow-clear="false">
-                                                        @foreach(getListOfTimezones() as $timezone)
-                                                            <option value="{{ $timezone }}" @if($selectedTimezone == $timezone) selected @endif>{{ $timezone }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                    @error('timezone')
-                                                    <div class="invalid-feedback">
-                                                        {{ $message }}
-                                                    </div>
-                                                    @enderror
-                                                </div>
-                                            @endif
-
                                             @if(!empty($webinar) and $webinar->creator->isOrganization())
                                                 <div class="form-group mt-30 d-flex align-items-center justify-content-between">
                                                     <label class="" for="privateSwitch">{{ trans('webinars.private') }}</label>
@@ -356,14 +298,6 @@
                                                 <div class="custom-control custom-switch">
                                                     <input type="checkbox" name="support" class="custom-control-input" id="supportSwitch" {{ !empty($webinar) && $webinar->support ? 'checked' : '' }}>
                                                     <label class="custom-control-label" for="supportSwitch"></label>
-                                                </div>
-                                            </div>
-
-                                            <div class="form-group mt-30 d-flex align-items-center justify-content-between">
-                                                <label class="" for="certificateSwitch">{{ trans('update.include_certificate') }}</label>
-                                                <div class="custom-control custom-switch">
-                                                    <input type="checkbox" name="certificate" class="custom-control-input" id="certificateSwitch" {{ !empty($webinar) && $webinar->certificate ? 'checked' : '' }}>
-                                                    <label class="custom-control-label" for="certificateSwitch"></label>
                                                 </div>
                                             </div>
 
@@ -384,30 +318,11 @@
                                             </div>
 
                                             <div class="form-group mt-30 d-flex align-items-center justify-content-between">
-                                                <label class="" for="forumSwitch">{{ trans('update.course_forum') }}</label>
-                                                <div class="custom-control custom-switch">
-                                                    <input type="checkbox" name="forum" class="custom-control-input" id="forumSwitch" {{ !empty($webinar) && $webinar->forum ? 'checked' : ''  }}>
-                                                    <label class="custom-control-label" for="forumSwitch"></label>
-                                                </div>
-                                            </div>
-
-                                            <div class="form-group mt-30 d-flex align-items-center justify-content-between">
                                                 <label class="" for="subscribeSwitch">{{ trans('public.subscribe') }}</label>
                                                 <div class="custom-control custom-switch">
                                                     <input type="checkbox" name="subscribe" class="custom-control-input" id="subscribeSwitch" {{ !empty($webinar) && $webinar->subscribe ? 'checked' : ''  }}>
                                                     <label class="custom-control-label" for="subscribeSwitch"></label>
                                                 </div>
-                                            </div>
-
-                                            <div class="form-group mt-15">
-                                                <label class="input-label">{{ trans('update.access_days') }}</label>
-                                                <input type="text" name="access_days" value="{{ !empty($webinar) ? $webinar->access_days : old('access_days') }}" class="form-control @error('access_days')  is-invalid @enderror"/>
-                                                @error('access_days')
-                                                <div class="invalid-feedback">
-                                                    {{ $message }}
-                                                </div>
-                                                @enderror
-                                                <p class="mt-1">- {{ trans('update.access_days_input_hint') }}</p>
                                             </div>
 
                                             <div class="form-group mt-15">
@@ -419,24 +334,14 @@
                                                 </div>
                                                 @enderror
                                             </div>
-
                                             <div id="partnerInstructorInput" class="form-group mt-15 {{ !empty($webinar) && $webinar->partner_instructor ? '' : 'd-none' }}">
                                                 <label class="input-label d-block">{{ trans('public.select_a_partner_teacher') }}</label>
 
-                                                <select name="partners[]" multiple data-search-option="just_teacher_role" class="form-control search-user-select2"
-                                                        data-placeholder="{{ trans('public.search_instructor') }}"
-                                                >
-                                                    @if(!empty($webinarPartnerTeacher))
-                                                        @foreach($webinarPartnerTeacher as $partner)
-                                                            @if(!empty($partner) and $partner->teacher)
-                                                                <option value="{{ $partner->teacher->id }}" selected>{{ $partner->teacher->full_name }}</option>
-                                                            @endif
-                                                        @endforeach
-                                                    @else
-                                                        <option selected disabled>{{ trans('public.search_instructor') }}</option>
-                                                    @endif
+                                                <select name="partners[]" class="form-control select2" multiple="" data-placeholder="{{ trans('public.search_instructor') }}">
+                                                    @foreach($teachers as $teacher)
+                                                        <option value="{{ $teacher->id }}" {{ !empty($webinar) && isset($webinarPartnerTeacher[$teacher->id]) ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
+                                                    @endforeach
                                                 </select>
-
                                                 <div class="text-muted text-small mt-1">{{ trans('admin/main.select_a_partner_hint') }}</div>
                                             </div>
 
@@ -554,9 +459,239 @@
                                         </div>
                                     </section>
 
+                                    <section class="mt-30">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h2 class="section-title after-line">{{ trans('public.chapters') }}</h2>
+                                            <button id="webinarAddChapter" type="button" class="btn btn-primary btn-sm mt-3">{{ trans('public.add_new_chapter') }}</button>
+                                        </div>
 
-                                    @include('admin.webinars.create_includes.contents')
+                                        <div class="row mt-10">
+                                            <div class="col-12">
+                                                @if(!empty($chapters) and !$chapters->isEmpty())
+                                                    <div class="table-responsive">
+                                                        <table class="table table-striped text-center font-14">
 
+                                                            <tr>
+                                                                <th>{{ trans('public.title') }}</th>
+                                                                <th>{{ trans('admin/main.type') }}</th>
+                                                                <th>{{ trans('public.parts') }}</th>
+                                                                <th>{{ trans('admin/main.status') }}</th>
+                                                                <th></th>
+                                                            </tr>
+
+                                                            @foreach($chapters as $chapter)
+                                                                <tr>
+                                                                    <th>{{ $chapter->title }}</th>
+                                                                    <th>{{ trans('admin/main.'.$chapter->type) }}</th>
+                                                                    <th>{{ $chapter->getTopicsCount() }}</th>
+                                                                    <th>{{ trans('admin/main.'.$chapter->status) }}</th>
+
+                                                                    <td class="text-right">
+                                                                        <button type="button" data-chapter-id="{{ $chapter->id }}" data-webinar-id="{{ !empty($webinar) ? $webinar->id : '' }}" class="edit-chapter btn-transparent text-primary mt-1" data-toggle="tooltip" data-placement="top" title="{{ trans('admin/main.edit') }}">
+                                                                            <i class="fa fa-edit"></i>
+                                                                        </button>
+
+                                                                        @include('admin.includes.delete_button',['url' => '/admin/chapters/'. $chapter->id .'/delete', 'btnClass' => ' mt-1'])
+                                                                    </td>
+                                                                </tr>
+                                                            @endforeach
+
+                                                        </table>
+                                                    </div>
+                                                @else
+                                                    @include('admin.includes.no-result',[
+                                                        'file_name' => 'meet.png',
+                                                        'title' => trans('public.sessions_no_result'),
+                                                        'hint' => trans('public.sessions_no_result_hint'),
+                                                    ])
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    @if($webinar->isWebinar())
+                                        <section class="mt-30">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <h2 class="section-title after-line">{{ trans('public.sessions') }}</h2>
+                                                <button id="webinarAddSession" type="button" class="btn btn-primary btn-sm mt-3">{{ trans('public.add_session') }}</button>
+                                            </div>
+
+                                            <div class="row mt-10">
+                                                <div class="col-12">
+                                                    @if(!empty($sessions) and !$sessions->isEmpty())
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped text-center font-14">
+
+                                                                <tr>
+                                                                    <th>{{ trans('public.title') }}</th>
+                                                                    <th>{{ trans('admin/main.session_api') }}</th>
+                                                                    <th>{{ trans('public.date_time') }}</th>
+                                                                    <th>{{ trans('public.duration') }}</th>
+                                                                    <th width="20%">{{ trans('public.link') }}</th>
+                                                                    <th>{{ trans('admin/main.status') }}</th>
+                                                                    <th></th>
+                                                                </tr>
+
+                                                                @foreach($sessions as $session)
+                                                                    <tr>
+                                                                        <th>
+                                                                            <span class="d-block">{{ $session->title }}</span>
+                                                                            @if(!empty($session->chapter))
+                                                                                <span class="font-12 d-block">{{ trans('public.chapter') }}: {{ $session->chapter->title }}</span>
+                                                                            @endif
+                                                                        </th>
+
+                                                                        <th>{{ trans('webinars.session_'.$session->session_api) }}</th>
+                                                                        <td>{{ dateTimeFormat($session->date,'j F Y \|\ H:i') }}</td>
+                                                                        <td>{{ $session->duration }} {{ trans('admin/main.min') }}</td>
+                                                                        <td>{{ $session->getJoinLink() }}</td>
+                                                                        <th>{{ trans('admin/main.'.$session->status) }}</th>
+                                                                        <td>
+                                                                            <button type="button" data-session-id="{{ $session->id }}" data-webinar-id="{{ !empty($webinar) ? $webinar->id : '' }}" class="edit-session btn-transparent text-primary mt-1" data-toggle="tooltip" data-placement="top" title="{{ trans('admin/main.edit') }}">
+                                                                                <i class="fa fa-edit"></i>
+                                                                            </button>
+
+                                                                            @include('admin.includes.delete_button',['url' => '/admin/sessions/'. $session->id .'/delete', 'btnClass' => ' mt-1'])
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforeach
+
+                                                            </table>
+                                                        </div>
+                                                    @else
+                                                        @include('admin.includes.no-result',[
+                                                            'file_name' => 'meet.png',
+                                                            'title' => trans('public.sessions_no_result'),
+                                                            'hint' => trans('public.sessions_no_result_hint'),
+                                                        ])
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </section>
+                                    @endif
+
+                                    <section class="mt-30">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h2 class="section-title after-line">{{ trans('public.files') }}</h2>
+                                            <button id="webinarAddFile" type="button" class="btn btn-primary btn-sm mt-3">{{ trans('public.add_file') }}</button>
+                                        </div>
+
+                                        <div class="row mt-10">
+                                            <div class="col-12">
+                                                @if(!empty($files) and !$files->isEmpty())
+                                                    <div class="table-responsive">
+                                                        <table class="table table-striped text-center font-14">
+
+                                                            <tr>
+                                                                <th>{{ trans('public.title') }}</th>
+                                                                <th>{{ trans('public.source') }}</th>
+                                                                <th>{{ trans('public.volume') }}</th>
+                                                                <th>{{ trans('public.file_type') }}</th>
+                                                                <th>{{ trans('public.accessibility') }}</th>
+                                                                <th>{{ trans('admin/main.status') }}</th>
+                                                                <th></th>
+                                                            </tr>
+
+                                                            @foreach($files as $file)
+                                                                <tr>
+                                                                    <th>
+                                                                        <span class="d-block">{{ $file->title }}</span>
+                                                                        @if(!empty($file->chapter))
+                                                                            <span class="font-12 d-block">{{ trans('public.chapter') }}: {{ $file->chapter->title }}</span>
+                                                                        @endif
+                                                                    </th>
+                                                                    <td>{{ $file->storage }}</td>
+                                                                    <td>{{ $file->volume }}</td>
+                                                                    <td>{{ $file->file_type }}</td>
+                                                                    <td>{{ $file->accessibility }}</td>
+                                                                    <th>{{ trans('admin/main.'.$file->status) }}</th>
+                                                                    <td>
+                                                                        <button type="button" data-file-id="{{ $file->id }}" data-webinar-id="{{ !empty($webinar) ? $webinar->id : '' }}" class="edit-file btn-transparent text-primary mt-1" data-toggle="tooltip" data-placement="top" title="{{ trans('admin/main.edit') }}">
+                                                                            <i class="fa fa-edit"></i>
+                                                                        </button>
+
+                                                                        @include('admin.includes.delete_button',['url' => '/admin/files/'. $file->id .'/delete', 'btnClass' => ' mt-1'])
+                                                                    </td>
+                                                                </tr>
+                                                            @endforeach
+
+                                                        </table>
+                                                    </div>
+                                                @else
+                                                    @include('admin.includes.no-result',[
+                                                        'file_name' => 'files.png',
+                                                        'title' => trans('public.files_no_result'),
+                                                        'hint' => trans('public.files_no_result_hint'),
+                                                    ])
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    @if($webinar->isTextCourse())
+                                        <section class="mt-30">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <h2 class="section-title after-line">{{ trans('public.test_lesson') }}</h2>
+                                                <button id="webinarAddTestLesson" type="button" class="btn btn-primary btn-sm mt-3">{{ trans('public.add_text_lesson') }}</button>
+                                            </div>
+
+                                            <div class="row mt-10">
+                                                <div class="col-12">
+                                                    @if(!empty($textLessons) and !$textLessons->isEmpty())
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped text-center font-14">
+
+                                                                <tr>
+                                                                    <th>{{ trans('public.title') }}</th>
+                                                                    <th>{{ trans('public.time') }}</th>
+                                                                    <th>{{ trans('public.attachments') }}</th>
+                                                                    <th>{{ trans('public.accessibility') }}</th>
+                                                                    <th>{{ trans('admin/main.status') }}</th>
+                                                                    <th></th>
+                                                                </tr>
+
+                                                                @foreach($textLessons as $textLesson)
+                                                                    <tr>
+                                                                        <th>
+                                                                            <span class="d-block">{{ $textLesson->title }}</span>
+                                                                            @if(!empty($textLesson->chapter))
+                                                                                <span class="font-12 d-block">{{ trans('public.chapter') }}: {{ $textLesson->chapter->title }}</span>
+                                                                            @endif
+                                                                        </th>
+
+                                                                        <td>{{ $textLesson->study_time }}</td>
+                                                                        <td>
+                                                                            @if(count($textLesson->attachments) > 0)
+                                                                                <span class="text-success">{{ trans('admin/main.yes') }} ({{ count($textLesson->attachments) }})</span>
+                                                                            @else
+                                                                                <span class="text-dark">{{ trans('admin/main.no') }}</span>
+                                                                            @endif
+                                                                        </td>
+                                                                        <td>{{ $textLesson->accessibility }}</td>
+                                                                        <th>{{ trans('admin/main.'.$textLesson->status) }}</th>
+                                                                        <td>
+                                                                            <button type="button" data-text-id="{{ $textLesson->id }}" data-webinar-id="{{ !empty($webinar) ? $webinar->id : '' }}" class="edit-test-lesson btn-transparent text-primary mt-1" data-toggle="tooltip" data-placement="top" title="{{ trans('admin/main.edit') }}">
+                                                                                <i class="fa fa-edit"></i>
+                                                                            </button>
+
+                                                                            @include('admin.includes.delete_button',['url' => '/admin/test-lesson/'. $textLesson->id .'/delete', 'btnClass' => ' mt-1'])
+                                                                        </td>
+                                                                    </tr>
+                                                                @endforeach
+
+                                                            </table>
+                                                        </div>
+                                                    @else
+                                                        @include('admin.includes.no-result',[
+                                                            'file_name' => 'files.png',
+                                                            'title' => trans('public.files_no_result'),
+                                                            'hint' => trans('public.files_no_result_hint'),
+                                                        ])
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </section>
+                                    @endif
 
                                     <section class="mt-30">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -584,7 +719,7 @@
                                                                     <tr>
                                                                         <th>{{ $prerequisite->prerequisiteWebinar->title }}</th>
                                                                         <td class="text-left">{{ $prerequisite->prerequisiteWebinar->teacher->full_name }}</td>
-                                                                        <td>{{  addCurrencyToPrice(handlePriceFormat($prerequisite->prerequisiteWebinar->price)) }}</td>
+                                                                        <td>$ {{  number_format($prerequisite->prerequisiteWebinar->price,2) }}</td>
                                                                         <td>{{ dateTimeFormat($prerequisite->prerequisiteWebinar->created_at,'j F Y | H:i') }}</td>
                                                                         <td>{{ $prerequisite->required ? trans('public.yes') : trans('public.no') }}</td>
 
@@ -661,66 +796,6 @@
                                         </div>
                                     </section>
 
-                                    @foreach(\App\Models\WebinarExtraDescription::$types as $webinarExtraDescriptionType)
-                                        <section class="mt-30">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <h2 class="section-title after-line">{{ trans('update.'.$webinarExtraDescriptionType) }}</h2>
-                                                <button id="add_new_{{ $webinarExtraDescriptionType }}" type="button" class="btn btn-primary btn-sm mt-3">{{ trans('update.add_'.$webinarExtraDescriptionType) }}</button>
-                                            </div>
-
-                                            @php
-                                                $webinarExtraDescriptionValues = $webinar->webinarExtraDescription->where('type',$webinarExtraDescriptionType);
-                                            @endphp
-
-                                            <div class="row mt-10">
-                                                <div class="col-12">
-                                                    @if(!empty($webinarExtraDescriptionValues) and count($webinarExtraDescriptionValues))
-                                                        <div class="table-responsive">
-                                                            <table class="table table-striped text-center font-14">
-
-                                                                <tr>
-                                                                    @if($webinarExtraDescriptionType == \App\Models\WebinarExtraDescription::$COMPANY_LOGOS)
-                                                                        <th>{{ trans('admin/main.icon') }}</th>
-                                                                    @else
-                                                                        <th>{{ trans('public.title') }}</th>
-                                                                    @endif
-                                                                    <th></th>
-                                                                </tr>
-
-                                                                @foreach($webinarExtraDescriptionValues as $extraDescription)
-                                                                    <tr>
-                                                                        @if($webinarExtraDescriptionType == \App\Models\WebinarExtraDescription::$COMPANY_LOGOS)
-                                                                            <td>
-                                                                                <img src="{{ $extraDescription->value }}" class="webinar-extra-description-company-logos" alt="">
-                                                                            </td>
-                                                                        @else
-                                                                            <td>{{ $extraDescription->value }}</td>
-                                                                        @endif
-
-                                                                        <td class="text-right">
-                                                                            <button type="button" data-item-id="{{ $extraDescription->id }}" data-webinar-id="{{ !empty($webinar) ? $webinar->id : '' }}" class="edit-extraDescription btn-transparent text-primary mt-1" data-toggle="tooltip" data-placement="top" title="{{ trans('admin/main.edit') }}">
-                                                                                <i class="fa fa-edit"></i>
-                                                                            </button>
-
-                                                                            @include('admin.includes.delete_button',['url' => '/admin/webinar-extra-description/'. $extraDescription->id .'/delete', 'btnClass' => ' mt-1'])
-                                                                        </td>
-                                                                    </tr>
-                                                                @endforeach
-
-                                                            </table>
-                                                        </div>
-                                                    @else
-                                                        @include('admin.includes.no-result',[
-                                                             'file_name' => 'faq.png',
-                                                             'title' => trans("update.{$webinarExtraDescriptionType}_no_result"),
-                                                             'hint' => trans("update.{$webinarExtraDescriptionType}_no_result_hint"),
-                                                        ])
-                                                    @endif
-                                                </div>
-                                            </div>
-                                        </section>
-                                    @endforeach
-
                                     <section class="mt-30">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <h2 class="section-title after-line">{{ trans('public.quiz_certificate') }}</h2>
@@ -777,7 +852,7 @@
                                     <div class="row">
                                         <div class="col-12">
                                             <div class="form-group mt-15">
-                                                <textarea name="message_for_reviewer" rows="10" class="form-control">{{ (!empty($webinar) && $webinar->message_for_reviewer) ? $webinar->message_for_reviewer : old('message_for_reviewer') }}</textarea>
+                                                <textarea name="message_for_reviewer" rows="10" class="form-control">{{ !empty($webinar) && $webinar->message_for_reviewer ? $webinar->message_for_reviewer : old('message_for_reviewer') }}</textarea>
                                             </div>
                                         </div>
                                     </div>
@@ -810,11 +885,8 @@
                             @include('admin.webinars.modals.chapter')
                             @include('admin.webinars.modals.session')
                             @include('admin.webinars.modals.file')
-                            @include('admin.webinars.modals.interactive_file')
                             @include('admin.webinars.modals.faq')
                             @include('admin.webinars.modals.testLesson')
-                            @include('admin.webinars.modals.assignment')
-                            @include('admin.webinars.modals.extra_description')
 
                         </div>
                     </div>
@@ -827,34 +899,15 @@
 @push('scripts_bottom')
     <script>
         var saveSuccessLang = '{{ trans('webinars.success_store') }}';
-        var titleLang = '{{ trans('admin/main.title') }}';
         var zoomJwtTokenInvalid = '{{ trans('admin/main.teacher_zoom_jwt_token_invalid') }}';
-        var editChapterLang = '{{ trans('public.edit_chapter') }}';
-        var requestFailedLang = '{{ trans('public.request_failed') }}';
-        var thisLiveHasEndedLang = '{{ trans('update.this_live_has_been_ended') }}';
-        var quizzesSectionLang = '{{ trans('quiz.quizzes_section') }}';
-        var filePathPlaceHolderBySource = {
-            upload: '{{ trans('update.file_source_upload_placeholder') }}',
-            youtube: '{{ trans('update.file_source_youtube_placeholder') }}',
-            vimeo: '{{ trans('update.file_source_vimeo_placeholder') }}',
-            external_link: '{{ trans('update.file_source_external_link_placeholder') }}',
-            google_drive: '{{ trans('update.file_source_google_drive_placeholder') }}',
-            dropbox: '{{ trans('update.file_source_dropbox_placeholder') }}',
-            iframe: '{{ trans('update.file_source_iframe_placeholder') }}',
-            s3: '{{ trans('update.file_source_s3_placeholder') }}',
-        }
     </script>
 
     <script src="/assets/default/vendors/sweetalert2/dist/sweetalert2.min.js"></script>
-    <script src="/assets/default/vendors/feather-icons/dist/feather.min.js"></script>
     <script src="/assets/default/vendors/select2/select2.min.js"></script>
     <script src="/assets/default/vendors/moment.min.js"></script>
     <script src="/assets/default/vendors/daterangepicker/daterangepicker.min.js"></script>
     <script src="/assets/default/vendors/bootstrap-timepicker/bootstrap-timepicker.min.js"></script>
     <script src="/assets/default/vendors/bootstrap-tagsinput/bootstrap-tagsinput.min.js"></script>
     <script src="/assets/vendors/summernote/summernote-bs4.min.js"></script>
-    <script src="/assets/default/vendors/sortable/jquery-ui.min.js"></script>
-
-    <script src="/assets/default/js/admin/quiz.min.js"></script>
     <script src="/assets/admin/js/webinar.min.js"></script>
 @endpush

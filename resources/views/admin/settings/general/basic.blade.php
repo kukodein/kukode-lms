@@ -1,9 +1,3 @@
-@php
-    if (!empty($itemValue) and !is_array($itemValue)) {
-        $itemValue = json_decode($itemValue, true);
-    }
-@endphp
-
 <div class="tab-pane mt-3 fade @if(empty($social)) show active @endif" id="basic" role="tabpanel" aria-labelledby="basic-tab">
     <div class="row">
         <div class="col-12 col-md-6">
@@ -14,17 +8,17 @@
 
                 <div class="form-group">
                     <label>{{ trans('admin/main.site_name') }}</label>
-                    <input type="text" name="" value="{{ (!empty($itemValue) and !empty($itemValue['site_name'])) ? $itemValue['site_name'] : old('site_name') }}" class="form-control "/>
+                    <input type="text" name="value[site_name]" value="{{ (!empty($itemValue) and !empty($itemValue['site_name'])) ? $itemValue['site_name'] : old('site_name') }}" class="form-control "/>
                 </div>
 
                 <div class="form-group">
                     <label>{{ trans('admin/main.site_email') }}</label>
-                    <input type="text" name="" value="{{ (!empty($itemValue) and !empty($itemValue['site_email'])) ? $itemValue['site_email'] : old('site_email') }}" class="form-control "/>
+                    <input type="text" name="value[site_email]" value="{{ (!empty($itemValue) and !empty($itemValue['site_email'])) ? $itemValue['site_email'] : old('site_email') }}" class="form-control "/>
                 </div>
 
                 <div class="form-group">
                     <label>{{ trans('admin/main.site_phone') }}</label>
-                    <input type="text" name="" value="{{ (!empty($itemValue) and !empty($itemValue['site_phone'])) ? $itemValue['site_phone'] : old('site_phone') }}" class="form-control "/>
+                    <input type="text" name="value[site_phone]" value="{{ (!empty($itemValue) and !empty($itemValue['site_phone'])) ? $itemValue['site_phone'] : old('site_phone') }}" class="form-control "/>
                 </div>
 
                 <div class="form-group">
@@ -41,34 +35,8 @@
                 <div class="form-group">
                     <label class="input-label d-block">{{ trans('admin/main.register_method') }}</label>
                     <select name="value[register_method]" class="form-control">
+                        <option value="mobile" @if(!empty($itemValue) and !empty($itemValue['register_method']) and $itemValue['register_method'] == 'mobile') selected @endif>{{ trans('admin/main.sms') }}</option>
                         <option value="email" @if(!empty($itemValue) and !empty($itemValue['register_method']) and $itemValue['register_method'] == 'email') selected @endif>{{ trans('admin/main.email') }}</option>
-                        <option>{{ trans('admin/main.sms') }} (Paid Plugin)</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="input-label d-block">{{ trans('update.default_time_zone') }}</label>
-                    <select name="value[default_time_zone]" class="form-control select2">
-                        <option value="" disabled @if(empty($itemValue) or empty($itemValue['default_time_zone'])) selected @endif>{{ trans('admin/main.select') }}</option>
-                        @foreach(getListOfTimezones() as $timezone)
-                            <option value="{{ $timezone }}" @if(!empty($itemValue) and !empty($itemValue['default_time_zone']) and $itemValue['default_time_zone'] == $timezone) selected @endif>{{ $timezone }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="input-label d-block">{{ trans('update.date_format') }}</label>
-                    <select name="value[date_format]" class="form-control">
-                        <option value="textual" @if(!empty($itemValue) and !empty($itemValue['date_format']) and $itemValue['date_format'] == 'textual') selected @endif>{{ trans('update.textual') }} (18 Dec 2021)</option>
-                        <option value="numerical" @if(!empty($itemValue) and !empty($itemValue['date_format']) and $itemValue['date_format'] == 'numerical') selected @endif>{{ trans('update.numerical') }} (18/12/2021)</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="input-label d-block">{{ trans('update.time_format') }}</label>
-                    <select name="value[time_format]" class="form-control">
-                        <option value="24_hours" @if(!empty($itemValue) and !empty($itemValue['time_format']) and $itemValue['time_format'] == '24_hours') selected @endif>{{ trans('update.24_hours') }}</option>
-                        <option value="12_hours" @if(!empty($itemValue) and !empty($itemValue['time_format']) and $itemValue['time_format'] == '12_hours') selected @endif>{{ trans('update.12_hours') }} (AM/PM)</option>
                     </select>
                 </div>
 
@@ -131,6 +99,11 @@
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label class="input-label">{{ trans('admin/main.webinar_reminder_schedule') }}</label>
+                    <input type="number" name="value[webinar_reminder_schedule]" id="webinar_reminder_schedule" value="{{ (!empty($itemValue) and !empty($itemValue['webinar_reminder_schedule'])) ? $itemValue['webinar_reminder_schedule'] : 1 }}" class="form-control" />
+                </div>
+
                 <div class="form-group custom-switches-stacked">
                     <label class="custom-switch pl-0">
                         <input type="hidden" name="value[rtl_layout]" value="0">
@@ -171,20 +144,8 @@
                     <label class="custom-switch pl-0">
                         <input type="hidden" name="value[content_translate]" value="0">
                         <span class="custom-switch-indicator"></span>
-                        <label class="custom-switch-description mb-0 cursor-pointer" for="contentTranslate">{{ trans('update.multi_language_content') }}</label>
+                        <label class="custom-switch-description mb-0 cursor-pointer" for="contentTranslate">{{ trans('admin/main.content_translate') }}</label>
                     </label>
-                    <div class="text-muted text-small mt-1">Paid Plugin</div>
-                </div>
-
-
-                <div class="form-group custom-switches-stacked">
-                    <label class="custom-switch pl-0">
-                        <input type="hidden" name="value[app_debugbar]" value="0">
-                        <input type="checkbox" name="value[app_debugbar]" id="appDebugbarSwitch" value="1" {{ (!empty($itemValue) and !empty($itemValue['app_debugbar']) and $itemValue['app_debugbar']) ? 'checked="checked"' : '' }} class="custom-switch-input"/>
-                        <span class="custom-switch-indicator"></span>
-                        <label class="custom-switch-description mb-0 cursor-pointer" for="appDebugbarSwitch">{{ trans('update.app_debugbar') }}</label>
-                    </label>
-                    <div class="text-muted text-small mt-1">{{ trans('update.app_debugbar_hint') }}</div>
                 </div>
 
 
