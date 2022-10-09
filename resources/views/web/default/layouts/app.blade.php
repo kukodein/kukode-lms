@@ -27,7 +27,7 @@
     <style>
         {!! !empty(getCustomCssAndJs('css')) ? getCustomCssAndJs('css') : '' !!}
 
-        {!! $this->getThemeFontsSettings() !!}
+        {!! getThemeFontsSettings() !!}
 
         {!! getThemeColorsSettings() !!}
     </style>
