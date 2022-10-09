@@ -63,7 +63,7 @@ class RewardController extends Controller
         $validator = Validator::make($data, [
             'type' => 'required',
             'score' => Rule::requiredIf($data['type'] != 'badge'),
-            'condition' => Rule::requiredIf(in_array($data['type'], ['charge_wallet', 'account_charge', 'buy', 'buy_store_product'])),
+            'condition' => Rule::requiredIf(($data['type'] == 'charge_wallet' or $data['type'] == 'account_charge' or $data['type'] == 'buy')),
         ]);
 
         if ($validator->fails()) {

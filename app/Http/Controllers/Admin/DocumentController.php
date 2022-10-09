@@ -97,7 +97,6 @@ class DocumentController extends Controller
         ]);
 
         $notifyOptions = [
-            '[c.title]' => '',
             '[f.d.type]' => $data['type'],
             '[amount]' => $data['amount'],
         ];

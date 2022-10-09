@@ -34,10 +34,8 @@ class Setting extends Model implements TranslatableContract
         $homeHero, $homeHero2, $homeVideoOrImage,
         $pageBackground, $customCssJs,
         $reportReasons, $notificationTemplates,
-        $contactPage, $Error404Page, $navbarLink, $panelSidebar, $findInstructors, $rewardProgram, $rewardsSettings, $storeSettings,
-        $registrationPackagesGeneral, $registrationPackagesInstructors, $registrationPackagesOrganizations, $becomeInstructorSection,
-        $themeColors, $themeFonts, $forumHomeSection, $cookieSettings, $mobileAppSettings, $remindersSettings, $advertisingModal,
-        $othersPersonalization;
+        $contactPage, $Error404Page, $navbarLink, $panelSidebar, $findInstructors, $rewardProgram, $rewardsSettings,
+        $registrationPackagesGeneral, $registrationPackagesInstructors, $registrationPackagesOrganizations,$becomeInstructorSection;
 
     // settings name , Using these keys, values are taken from the settings table
     static $seoMetasName = 'seo_metas';
@@ -63,36 +61,20 @@ class Setting extends Model implements TranslatableContract
     static $findInstructorsName = 'find_instructors';
     static $rewardProgramName = 'reward_program';
     static $rewardsSettingsName = 'rewards_settings';
-    static $storeSettingsName = 'store_settings';
     static $registrationPackagesGeneralName = 'registration_packages_general';
     static $registrationPackagesInstructorsName = 'registration_packages_instructors';
     static $registrationPackagesOrganizationsName = 'registration_packages_organizations';
     static $becomeInstructorSectionName = 'become_instructor_section';
-    static $themeColorsName = 'theme_colors';
-    static $themeFontsName = 'theme_fonts';
-    static $forumHomeSectionName = 'forums_section';
-    static $cookieSettingsName = 'cookie_settings';
-    static $mobileAppSettingsName = 'mobile_app';
-    static $remindersSettingsName = 'reminders';
-    static $advertisingModalName = 'advertising_modal';
-    static $othersPersonalizationName = 'others_personalization';
 
     //statics
     static $pagesSeoMetas = ['home', 'search', 'categories', 'classes', 'login', 'register', 'contact', 'blog', 'certificate_validation',
-        'instructors', 'organizations', 'instructor_finder_wizard', 'instructor_finder', 'reward_courses', 'products_lists', 'reward_products',
-        'forum',
+        'instructors', 'organizations', 'instructor_finder_wizard', 'instructor_finder', 'reward_courses'
     ];
     static $mainSettingSections = ['general', 'financial', 'payment', 'home_hero', 'home_hero2', 'page_background', 'home_video_or_image_box'];
     static $mainSettingPages = ['general', 'financial', 'personalization', 'notifications', 'seo', 'customization', 'other'];
 
     static $defaultSettingsLocale = 'en'; // Because the settings table uses translation and some settings do not need to be translated, so we save them with a default locale
 
-    static $rootColors = ['primary', "primary-border", "primary-hover", "primary-border-hover",
-        "primary-btn-shadow", "primary-btn-shadow-hover", "primary-btn-color", "primary-btn-color-hover",
-        'secondary', "secondary-border", "secondary-hover", "secondary-border-hover", "secondary-btn-shadow", "secondary-btn-shadow-hover",
-        "secondary-btn-color", "secondary-btn-color-hover"];
-
-    static $rootAdminColors = ['primary'];
 
     static function getSettingsWithDefaultLocal(): array
     {
@@ -183,14 +165,6 @@ class Setting extends Model implements TranslatableContract
     static function getFeaturesSettings($key = null)
     {
         return self::getSetting(self::$features, self::$featuresName, $key);
-    }
-
-    /**
-     * @return array []
-     */
-    static function getCookieSettings($key = null)
-    {
-        return self::getSetting(self::$cookieSettings, self::$cookieSettingsName, $key);
     }
 
 
@@ -346,22 +320,9 @@ class Setting extends Model implements TranslatableContract
         return self::getSetting(self::$rewardsSettings, self::$rewardsSettingsName);
     }
 
-    /**
-     * @return array
-     */
-    static function getStoreSettings($key = null)
-    {
-        return self::getSetting(self::$storeSettings, self::$storeSettingsName, $key);
-    }
-
     static function getBecomeInstructorSectionSettings()
     {
         return self::getSetting(self::$becomeInstructorSection, self::$becomeInstructorSectionName);
-    }
-
-    static function getForumSectionSettings()
-    {
-        return self::getSetting(self::$forumHomeSection, self::$forumHomeSectionName);
     }
 
     static function getRegistrationPackagesGeneralSettings($key = null)
@@ -377,35 +338,5 @@ class Setting extends Model implements TranslatableContract
     static function getRegistrationPackagesOrganizationsSettings($key = null)
     {
         return self::getSetting(self::$registrationPackagesOrganizations, self::$registrationPackagesOrganizationsName, $key);
-    }
-
-    static function getThemeColorsSettings()
-    {
-        return self::getSetting(self::$themeColors, self::$themeColorsName);
-    }
-
-    static function getThemeFontsSettings()
-    {
-        return self::getSetting(self::$themeFonts, self::$themeFontsName);
-    }
-
-    static function getMobileAppSettings($key = null)
-    {
-        return self::getSetting(self::$mobileAppSettings, self::$mobileAppSettingsName, $key);
-    }
-
-    static function getRemindersSettings($key = null)
-    {
-        return self::getSetting(self::$remindersSettings, self::$remindersSettingsName, $key);
-    }
-
-    static function getAdvertisingModalSettings($key = null)
-    {
-        return self::getSetting(self::$advertisingModal, self::$advertisingModalName, $key);
-    }
-
-    static function getOthersPersonalizationSettings($key = null)
-    {
-        return self::getSetting(self::$othersPersonalization, self::$othersPersonalizationName, $key);
     }
 }

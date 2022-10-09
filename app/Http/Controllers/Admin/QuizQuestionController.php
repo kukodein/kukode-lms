@@ -9,39 +9,19 @@ use App\Models\Translation\QuizzesQuestionsAnswerTranslation;
 use App\Models\Translation\QuizzesQuestionTranslation;
 use Illuminate\Http\Request;
 use App\Models\Quiz;
-use Illuminate\Support\Facades\Validator;
 
 class QuizQuestionController extends Controller
 {
     public function store(Request $request)
     {
-        $data = $request->get('ajax');
-
-        $rules = [
+        $this->validate($request, [
             'quiz_id' => 'required|exists:quizzes,id',
-            'title' => 'required',
+            'title' => 'required|max:255',
             'grade' => 'required|integer',
             'type' => 'required',
-            'image' => 'nullable|max:255',
-            'video' => 'nullable|max:255',
-        ];
+        ]);
 
-        $validate = Validator::make($data, $rules);
-
-        if ($validate->fails()) {
-            return response()->json([
-                'code' => 422,
-                'errors' => $validate->errors()
-            ], 422);
-        }
-
-        if (!empty($data['image']) and !empty($data['video'])) {
-
-            return back()->withErrors([
-                'image' => [trans('update.quiz_question_image_validation_by_video')],
-                'video' => [trans('update.quiz_question_image_validation_by_video')],
-            ]);
-        }
+        $data = $request->all();
 
         if ($data['type'] == QuizzesQuestion::$multiple and !empty($data['answers'])) {
             $answers = $data['answers'];
@@ -73,8 +53,6 @@ class QuizQuestionController extends Controller
                 'creator_id' => $creator->id,
                 'grade' => $data['grade'],
                 'type' => $data['type'],
-                'image' => $data['image'] ?? null,
-                'video' => $data['video'] ?? null,
                 'created_at' => time()
             ]);
 
@@ -97,7 +75,7 @@ class QuizQuestionController extends Controller
                         $questionAnswer = QuizzesQuestionsAnswer::create([
                             'question_id' => $quizQuestion->id,
                             'creator_id' => $creator->id,
-                            'image' => $answer['file'] ?? null,
+                            'image' => $answer['file'],
                             'correct' => isset($answer['correct']) ? true : false,
                             'created_at' => time()
                         ]);
@@ -198,33 +176,14 @@ class QuizQuestionController extends Controller
 
     public function update(Request $request, $id)
     {
-        $data = $request->get('ajax');
-
-        $rules = [
+        $this->validate($request, [
             'quiz_id' => 'required|exists:quizzes,id',
             'title' => 'required',
             'grade' => 'required',
             'type' => 'required',
-            'image' => 'nullable|max:255',
-            'video' => 'nullable|max:255',
-        ];
+        ]);
 
-        $validate = Validator::make($data, $rules);
-
-        if ($validate->fails()) {
-            return response()->json([
-                'code' => 422,
-                'errors' => $validate->errors()
-            ], 422);
-        }
-
-        if (!empty($data['image']) and !empty($data['video'])) {
-
-            return back()->withErrors([
-                'image' => [trans('update.quiz_question_image_validation_by_video')],
-                'video' => [trans('update.quiz_question_image_validation_by_video')],
-            ]);
-        }
+        $data = $request->all();
 
         if ($data['type'] == QuizzesQuestion::$multiple and !empty($data['answers'])) {
             $answers = $data['answers'];
@@ -246,7 +205,7 @@ class QuizQuestionController extends Controller
             }
         }
 
-        $quiz = Quiz::where('id', $data['quiz_id'])->first();
+        $quiz = Quiz::where('id', $request->input('quiz_id'))->first();
 
         if (!empty($quiz)) {
             $creator = $quiz->creator;
@@ -264,8 +223,6 @@ class QuizQuestionController extends Controller
                     'creator_id' => $creator->id,
                     'grade' => $data['grade'],
                     'type' => $data['type'],
-                    'image' => $data['image'] ?? null,
-                    'video' => $data['video'] ?? null,
                     'updated_at' => time()
                 ]);
 
@@ -299,7 +256,7 @@ class QuizQuestionController extends Controller
                                 $quizQuestionsAnswer->update([
                                     'question_id' => $quizQuestion->id,
                                     'creator_id' => $creator->id,
-                                    'image' => $answer['file'] ?? null,
+                                    'image' => $answer['file'],
                                     'correct' => isset($answer['correct']) ? true : false,
                                     'created_at' => time()
                                 ]);
@@ -324,7 +281,7 @@ class QuizQuestionController extends Controller
                         }
                     }
 
-                    if (count($oldAnswerIds)) {
+                    if(count($oldAnswerIds)) {
                         QuizzesQuestionsAnswer::whereIn('id', $oldAnswerIds)->delete();
                     }
                 }

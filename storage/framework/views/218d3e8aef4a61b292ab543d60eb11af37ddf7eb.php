@@ -28,7 +28,7 @@
         <?php echo !empty(getCustomCssAndJs('css')) ? getCustomCssAndJs('css') : ''; ?>
 
 
-        <?php echo getThemeFontsSettings(); ?>
+        <?php echo $this->getThemeFontsSettings(); ?>
 
 
         <?php echo getThemeColorsSettings(); ?>

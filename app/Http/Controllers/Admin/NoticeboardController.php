@@ -23,7 +23,7 @@ class NoticeboardController extends Controller
             ->get();
 
         $data = [
-            'pageTitle' => trans('panel.noticeboards'),
+            'pageTitle' => trans('admin/main.notices_list_title'),
             'noticeboards' => $noticeboards,
             'organizations' => $organizations,
         ];

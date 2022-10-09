@@ -13,7 +13,6 @@ class Channel implements IChannel
     protected $currency;
     protected $api_key;
     protected $api_secret;
-    protected $test_mode;
 
     /**
      * Channel constructor.
@@ -24,7 +23,6 @@ class Channel implements IChannel
         $this->currency = currency();
         $this->api_key = env('PAYSERA_KEY');
         $this->api_secret = env('PAYSERA_SECRET');
-        $this->test_mode = env('PAYSERA_TEST_MODE');
     }
 
     public function paymentRequest(Order $order)
@@ -58,7 +56,6 @@ class Channel implements IChannel
                 'paymentMethod' => 'hanzaee',
                 'amount' => $order->total_amount,
                 'currency' => $this->currency,
-                'testMode' => $this->test_mode,
                 'returnUrl' => $this->makeCallbackUrl($order, 'success'),
                 'cancelUrl' => $this->makeCallbackUrl($order, 'cancel'),
                 'notifyUrl' => $this->makeCallbackUrl($order, 'notify'),
@@ -73,7 +70,7 @@ class Channel implements IChannel
 
     private function makeCallbackUrl($order, $status)
     {
-        return url("/payments/verify/Robokassa?status=$status&order_id=$order->id");
+        return url("/payments/verify/Stripe?status=$status&order_id=$order->id");
     }
 
     public function verify(Request $request)
@@ -111,6 +108,11 @@ class Channel implements IChannel
             ]);
         }
 
-        return $order;
+        $toastData = [
+            'title' => trans('cart.fail_purchase'),
+            'msg' => trans('cart.gateway_error'),
+            'status' => 'error'
+        ];
+        return back()->with(['toast' => $toastData])->withInput();
     }
 }

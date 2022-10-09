@@ -77,7 +77,7 @@ class BlogController extends Controller
                 ->with([
                     'category',
                     'author' => function ($query) {
-                        $query->select('id', 'full_name', 'role_id', 'avatar', 'role_name');
+                        $query->select('id', 'full_name', 'role_id', 'avatar');
                         $query->with('role');
                     },
                     'comments' => function ($query) {

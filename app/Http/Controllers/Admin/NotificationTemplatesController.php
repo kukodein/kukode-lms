@@ -12,7 +12,7 @@ class NotificationTemplatesController extends Controller
     {
         $this->authorize('admin_notifications_list');
 
-        $templates = NotificationTemplate::orderBy('id','desc')->paginate(10);
+        $templates = NotificationTemplate::paginate(10);
 
         $data = [
             'pageTitle' => trans('admin/pages/users.templates'),

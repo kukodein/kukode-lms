@@ -29,7 +29,7 @@ class ReserveMeeting extends Model
 
     public function sale()
     {
-        return $this->belongsTo('App\Models\Sale', 'sale_id', 'id')->whereNull('refund_at');
+        return $this->belongsTo('App\Models\Sale', 'sale_id', 'id');
     }
 
     public function user()

@@ -19,11 +19,6 @@ class SpecialOffer extends Model
         return $this->hasOne('App\Models\Webinar', 'id', 'webinar_id');
     }
 
-    public function bundle()
-    {
-        return $this->hasOne('App\Models\Bundle', 'id', 'bundle_id');
-    }
-
     public function getRemainingTimes()
     {
         $current_time = time();

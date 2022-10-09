@@ -91,7 +91,6 @@ class RegistrationPackagesController extends Controller
             'courses_capacity' => 'nullable|numeric',
             'courses_count' => 'nullable|numeric',
             'meeting_count' => 'nullable|numeric',
-            'product_count' => 'nullable|numeric',
         ]);
 
         $data = $request->all();
@@ -110,7 +109,6 @@ class RegistrationPackagesController extends Controller
             'courses_capacity' => $data['courses_capacity'] ?? null,
             'courses_count' => $data['courses_count'] ?? null,
             'meeting_count' => $data['meeting_count'] ?? null,
-            'product_count' => $data['product_count'] ?? null,
             'status' => $data['status'],
             'created_at' => time(),
         ]);
@@ -162,7 +160,6 @@ class RegistrationPackagesController extends Controller
             'courses_capacity' => 'nullable|numeric',
             'courses_count' => 'nullable|numeric',
             'meeting_count' => 'nullable|numeric',
-            'product_count' => 'nullable|numeric',
         ]);
 
         $data = $request->all();
@@ -181,7 +178,6 @@ class RegistrationPackagesController extends Controller
             'courses_capacity' => $data['courses_capacity'] ?? null,
             'courses_count' => $data['courses_count'] ?? null,
             'meeting_count' => $data['meeting_count'] ?? null,
-            'product_count' => $data['product_count'] ?? null,
             'status' => $data['status'],
             'created_at' => time(),
         ]);

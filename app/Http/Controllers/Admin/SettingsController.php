@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Admin\traits\NavbarButtonSettings;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationTemplate;
 use App\Models\PaymentChannel;
@@ -13,8 +12,6 @@ use Illuminate\Support\Facades\Validator;
 
 class SettingsController extends Controller
 {
-    use NavbarButtonSettings;
-
     public function index()
     {
         removeContentLocale();
@@ -31,7 +28,7 @@ class SettingsController extends Controller
     public function page($page)
     {
         removeContentLocale();
-        $request = request();
+
         $this->authorize('admin_settings_' . $page);
 
         $settings = Setting::where('page', $page)
@@ -41,22 +38,14 @@ class SettingsController extends Controller
         foreach ($settings as $setting) {
             $setting->value = json_decode($setting->value, true);
         }
-        // if (!empty($request->get('name'))) {
-            // $name = $request->get('name');
-        // }
 
         $data = [
             'pageTitle' => trans('admin/main.settings_title'),
-            'settings' => $settings,
-            // 'name' => $name,
+            'settings' => $settings
         ];
 
         if ($page == 'notifications') {
             $data['notificationTemplates'] = NotificationTemplate::all();
-        }
-
-        if ($page == 'personalization') {
-            $data['name'] = 'page_background';
         }
 
         if ($page == 'financial') {
@@ -70,6 +59,7 @@ class SettingsController extends Controller
     public function personalizationPage(Request $request, $name)
     {
         removeContentLocale();
+
 
         $this->authorize('admin_settings_personalization');
 
@@ -85,7 +75,6 @@ class SettingsController extends Controller
             }
 
             $locale = $request->get('locale', mb_strtolower($defaultLocal));
-
             storeContentLocale($locale, $settings->getTable(), $settings->id);
 
             if (!empty($settings->value)) {
@@ -100,7 +89,7 @@ class SettingsController extends Controller
             'values' => $values,
             'name' => $name
         ];
-        // dd($name);
+
         return view('admin.settings.personalization', $data);
     }
 

@@ -11,8 +11,6 @@ class Sale extends Model
     public static $subscribe = 'subscribe';
     public static $promotion = 'promotion';
     public static $registrationPackage = 'registration_package';
-    public static $product = 'product';
-    public static $bundle = 'bundle';
 
     public static $credit = 'credit';
     public static $paymentChannel = 'payment_channel';
@@ -24,11 +22,6 @@ class Sale extends Model
     public function webinar()
     {
         return $this->belongsTo('App\Models\Webinar', 'webinar_id', 'id');
-    }
-
-    public function bundle()
-    {
-        return $this->belongsTo('App\Models\Bundle', 'bundle_id', 'id');
     }
 
     public function buyer()
@@ -76,11 +69,6 @@ class Sale extends Model
         return $this->hasOne('App\Models\SaleLog', 'sale_id', 'id');
     }
 
-    public function productOrder()
-    {
-        return $this->belongsTo('App\Models\ProductOrder', 'product_order_id', 'id');
-    }
-
     public static function createSales($orderItem, $payment_method)
     {
         $orderType = Order::$webinar;
@@ -92,10 +80,6 @@ class Sale extends Model
             $orderType = Order::$promotion;
         } elseif (!empty($orderItem->registration_package_id)) {
             $orderType = Order::$registrationPackage;
-        } elseif (!empty($orderItem->product_id)) {
-            $orderType = Order::$product;
-        } elseif (!empty($orderItem->bundle_id)) {
-            $orderType = Order::$bundle;
         }
 
         $seller_id = OrderItem::getSeller($orderItem);
@@ -105,12 +89,10 @@ class Sale extends Model
             'seller_id' => $seller_id,
             'order_id' => $orderItem->order_id,
             'webinar_id' => $orderItem->webinar_id,
-            'bundle_id' => $orderItem->bundle_id,
             'meeting_id' => !empty($orderItem->reserve_meeting_id) ? $orderItem->reserveMeeting->meeting_id : null,
             'subscribe_id' => $orderItem->subscribe_id,
             'promotion_id' => $orderItem->promotion_id,
             'registration_package_id' => $orderItem->registration_package_id,
-            'product_order_id' => $orderItem->product_order_id ?? null,
             'type' => $orderType,
             'payment_method' => $payment_method,
             'amount' => $orderItem->amount,
@@ -118,15 +100,12 @@ class Sale extends Model
             'commission' => $orderItem->commission_price,
             'discount' => $orderItem->discount,
             'total_amount' => $orderItem->total_amount,
-            'product_delivery_fee' => $orderItem->product_delivery_fee,
             'created_at' => time(),
         ]);
 
         $title = '';
         if (!empty($orderItem->webinar_id)) {
             $title = $orderItem->webinar->title;
-        } elseif (!empty($orderItem->bundle_id)) {
-            $title = $orderItem->bundle->title;
         } else if (!empty($orderItem->meeting_id)) {
             $title = trans('meeting.reservation_appointment');
         } else if (!empty($orderItem->subscribe_id)) {
@@ -135,15 +114,17 @@ class Sale extends Model
             $title = $orderItem->promotion->title . ' ' . trans('panel.promotion');
         } else if (!empty($orderItem->registration_package_id)) {
             $title = $orderItem->registrationPackage->title . ' ' . trans('update.registration_package');
-        } else if (!empty($orderItem->product_id)) {
-            $title = $orderItem->product->title;
-
-            $buyStoreReward = RewardAccounting::calculateScore(Reward::BUY_STORE_PRODUCT, $orderItem->total_amount);
-            RewardAccounting::makeRewardAccounting($orderItem->user_id, $buyStoreReward, Reward::BUY_STORE_PRODUCT, $orderItem->product_id);
         }
 
         $buyReward = RewardAccounting::calculateScore(Reward::BUY, $orderItem->total_amount);
         RewardAccounting::makeRewardAccounting($orderItem->user_id, $buyReward, Reward::BUY);
+
+        $notifyOptions = [
+            '[c.title]' => $title,
+        ];
+
+        sendNotification('new_sales', $notifyOptions, $seller_id);
+        sendNotification('new_purchase', $notifyOptions, $orderItem->user_id);
 
         if ($orderItem->reserve_meeting_id) {
             $reserveMeeting = $orderItem->reserveMeeting;
@@ -155,22 +136,7 @@ class Sale extends Model
             ];
             sendNotification('new_appointment', $notifyOptions, $orderItem->user_id);
             sendNotification('new_appointment', $notifyOptions, $reserveMeeting->meeting->creator_id);
-        } elseif (!empty($orderItem->product_id)) {
-            $notifyOptions = [
-                '[p.title]' => $title,
-            ];
-
-            sendNotification('product_new_sale', $notifyOptions, $seller_id);
-            sendNotification('product_new_purchase', $notifyOptions, $orderItem->user_id);
-        } else {
-            $notifyOptions = [
-                '[c.title]' => $title,
-            ];
-
-            sendNotification('new_sales', $notifyOptions, $seller_id);
-            sendNotification('new_purchase', $notifyOptions, $orderItem->user_id);
         }
-
 
         return $sale;
     }
@@ -199,11 +165,11 @@ class Sale extends Model
         return round($income, 2);
     }
 
-    public function getUsedSubscribe($user_id, $itemId, $itemName = 'webinar_id')
+    public function getUsedSubscribe($user_id, $webinar_id)
     {
         $subscribe = null;
         $use = SubscribeUse::where('sale_id', $this->id)
-            ->where($itemName, $itemId)
+            ->where('webinar_id', $webinar_id)
             ->where('user_id', $user_id)
             ->first();
 

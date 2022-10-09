@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 use MercadoPago\SDK as Mercado;
 use MercadoPago\Preference as MercadoPreference;
 use MercadoPago\Item as MercadoItem;
-use MercadoPago\Payer as MercadoPagoPayer;
 
 class Channel implements IChannel
 {
@@ -33,22 +32,20 @@ class Channel implements IChannel
         $this->client_id = env('MERCADO_CLIENT_ID');
         $this->client_secret = env('MERCADO_CLIENT_SECRET');
 
-        $this->order_session_key = 'mercado.payments.order_id';
+        $this->order_session_key = 'strip.payments.order_id';
     }
 
     public function paymentRequest(Order $order)
     {
-        $user = $order->user;
-
         Mercado::setAccessToken($this->access_token);
 
-        $payer = new MercadoPagoPayer();
-        $payer->name = $user->full_name;
-        $payer->email = $user->email;
-        $payer->phone = array(
-            "area_code" => "",
-            "number" => $user->mobile
-        );
+
+        /*Mercado::setPublicKey($this->api_key);
+        Mercado::setClientId(env('MERCADO_CLIENT_ID'));
+        Mercado::setClientSecret(env('MERCADO_CLIENT_SECRET'));*/
+
+        /*$generalSettings = getGeneralSettings();
+        $user = $order->user;*/
 
         $orderItems = $order->orderItems;
 
@@ -67,16 +64,15 @@ class Channel implements IChannel
 
         $preference = new MercadoPreference();
         $preference->items = $items;
-        $preference->payer = $payer;
         $preference->back_urls = $this->makeCallbackUrl($order);
         $preference->auto_return = "approved";
 
-        /*$preference->payment_methods = array(
+        $preference->payment_methods = array(
             "excluded_payment_types" => array(
                 array("id" => "credit_card")
             ),
             "installments" => 12
-        );*/
+        );
 
         $preference->save();
 

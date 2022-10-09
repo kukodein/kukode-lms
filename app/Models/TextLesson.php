@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Traits\SequenceContent;
 use Illuminate\Database\Eloquent\Model;
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
 use Astrotomic\Translatable\Translatable;
@@ -10,7 +9,6 @@ use Astrotomic\Translatable\Translatable;
 class TextLesson extends Model implements TranslatableContract
 {
     use Translatable;
-    use SequenceContent;
 
     protected $table = 'text_lessons';
     public $timestamps = false;

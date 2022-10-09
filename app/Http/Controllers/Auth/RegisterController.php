@@ -9,7 +9,6 @@ use App\Models\AffiliateCode;
 use App\Models\Reward;
 use App\Models\RewardAccounting;
 use App\Models\Role;
-use App\Models\UserMeta;
 use App\Providers\RouteServiceProvider;
 use App\User;
 use Illuminate\Auth\Events\Registered;
@@ -82,16 +81,15 @@ class RegisterController extends Controller
      */
     protected function validator(array $data)
     {
-        $registerMethod = getGeneralSettings('register_method') ?? 'mobile';
+        $username = $this->username();
 
-        if (!empty($data['mobile']) and !empty($data['country_code'])) {
-            $data['mobile'] = ltrim($data['country_code'], '+') . ltrim($data['mobile'], '0');
+        if ($username == 'mobile') {
+            $data[$username] = ltrim($data['country_code'], '+') . ltrim($data[$username], '0');
         }
 
         return Validator::make($data, [
-            'country_code' => ($registerMethod == 'mobile') ? 'required' : 'nullable',
-            'mobile' => (($registerMethod == 'mobile') ? 'required' : 'nullable') . '|numeric|unique:users',
-            'email' => (($registerMethod == 'email') ? 'required' : 'nullable') . '|email|max:255|unique:users',
+            'country_code' => ($username == 'mobile') ? 'required' : 'nullable',
+            $username => ($username == 'mobile') ? 'required|numeric|unique:users' : 'required|string|email|max:255|unique:users',
             'term' => 'required',
             'full_name' => 'required|string|min:3',
             'password' => 'required|string|min:6|confirmed',
@@ -108,8 +106,10 @@ class RegisterController extends Controller
      */
     protected function create(array $data)
     {
-        if (!empty($data['mobile']) and !empty($data['country_code'])) {
-            $data['mobile'] = ltrim($data['country_code'], '+') . ltrim($data['mobile'], '0');
+        $username = $this->username();
+
+        if ($username == 'mobile') {
+            $data[$username] = ltrim($data['country_code'], '+') . ltrim($data[$username], '0');
         }
 
         $referralSettings = getReferralSettings();
@@ -119,35 +119,37 @@ class RegisterController extends Controller
             $data['timezone'] = getGeneralSettings('default_time_zone') ?? null;
         }
 
-        $disableViewContentAfterUserRegister = getFeaturesSettings('disable_view_content_after_user_register');
-        $accessContent = !((!empty($disableViewContentAfterUserRegister) and $disableViewContentAfterUserRegister));
-
         $user = User::create([
             'role_name' => Role::$user,
             'role_id' => Role::getUserRoleId(),//normal user
-            'mobile' => $data['mobile'] ?? null,
-            'email' => $data['email'] ?? null,
+            $username => $data[$username],
             'full_name' => $data['full_name'],
             'status' => User::$pending,
-            'access_content' => $accessContent,
             'password' => Hash::make($data['password']),
             'affiliate' => $usersAffiliateStatus,
             'timezone' => $data['timezone'] ?? null,
             'created_at' => time()
         ]);
 
-        if (!empty($data['certificate_additional'])) {
-            UserMeta::updateOrCreate([
-                'user_id' => $user->id,
-                'name' => 'certificate_additional'
-            ], [
-                'value' => $data['certificate_additional']
-            ]);
-        }
-
         return $user;
     }
 
+    public function username()
+    {
+        $email_regex = "/^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,})$/i";
+
+        $data = request()->all();
+
+        if (empty($this->username)) {
+            if (in_array('mobile', array_keys($data))) {
+                $this->username = 'mobile';
+            } else if (in_array('email', array_keys($data))) {
+                $this->username = 'email';
+            }
+        }
+
+        return $this->username ?? '';
+    }
 
     public function register(Request $request)
     {
@@ -157,15 +159,15 @@ class RegisterController extends Controller
 
         event(new Registered($user));
 
-        $registerMethod = getGeneralSettings('register_method') ?? 'mobile';
+        $username = $this->username();
 
-        $value = $request->get($registerMethod);
-        if ($registerMethod == 'mobile') {
-            $value = $request->get('country_code') . ltrim($request->get('mobile'), '0');
+        $value = $request->get($username);
+        if ($username == 'mobile') {
+            $value = $request->get('country_code') . ltrim($request->get($username), '0');
         }
 
         $verificationController = new VerificationController();
-        $checkConfirmed = $verificationController->checkConfirmed($user, $registerMethod, $value);
+        $checkConfirmed = $verificationController->checkConfirmed($user, $username, $value);
 
         $referralCode = $request->get('referral_code', null);
 

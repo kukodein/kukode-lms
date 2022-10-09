@@ -46,14 +46,14 @@ class Channel implements IChannel
         $api = new Api($this->api_key, $this->api_secret);
         $payment = $api->payment->fetch($input['razorpay_payment_id']);
 
-        $order = Order::where('id', $orderId)
-            ->where('user_id', $user->id)
-            ->with('user')
-            ->first();
-
         if (count($input) and !empty($input['razorpay_payment_id'])) {
 
             $response = $api->payment->fetch($input['razorpay_payment_id'])->capture(array('amount' => $payment['amount']));
+
+            $order = Order::where('id', $orderId)
+                ->where('user_id', $user->id)
+                ->with('user')
+                ->first();
 
             if (!empty($order)) {
                 if ($response['status'] == 'captured') {
@@ -69,6 +69,11 @@ class Channel implements IChannel
             }
         }
 
-        return $order;
+        $toastData = [
+            'title' => trans('cart.fail_purchase'),
+            'msg' => trans('cart.gateway_error'),
+            'status' => 'error'
+        ];
+        return back()->with(['toast' => $toastData])->withInput();
     }
 }

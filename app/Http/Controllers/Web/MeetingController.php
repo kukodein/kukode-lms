@@ -19,144 +19,124 @@ class MeetingController extends Controller
     public function reserve(Request $request)
     {
         $user = auth()->user();
+        $timeId = $request->input('time');
+        $day = $request->input('day');
+        $studentCount = $request->get('student_count', 1);
+        $selectedMeetingType = $request->get('meeting_type', 'online');
+        $description = $request->get('description');
 
-        if (!empty($user)) {
+        if (empty($studentCount)) {
+            $studentCount = 1;
+        }
 
-            $timeId = $request->input('time');
-            $day = $request->input('day');
-            $studentCount = $request->get('student_count', 1);
-            $selectedMeetingType = $request->get('meeting_type', 'online');
-            $description = $request->get('description');
+        if (!in_array($selectedMeetingType, ['in_person', 'online'])) {
+            $selectedMeetingType = 'online';
+        }
 
-            if (empty($studentCount)) {
-                $studentCount = 1;
-            }
+        if (!empty($timeId)) {
+            $meetingTime = MeetingTime::where('id', $timeId)
+                ->with('meeting')
+                ->first();
 
-            if (!in_array($selectedMeetingType, ['in_person', 'online'])) {
-                $selectedMeetingType = 'online';
-            }
+            if (!empty($meetingTime)) {
+                $meeting = $meetingTime->meeting;
 
-            if (!empty($timeId)) {
-                $meetingTime = MeetingTime::where('id', $timeId)
-                    ->with('meeting')
-                    ->first();
+                if (!empty($meeting) and !$meeting->disabled) {
+                    if (!empty($meeting->amount) and $meeting->amount > 0) {
 
-                if (!empty($meetingTime)) {
-                    $meeting = $meetingTime->meeting;
+                        $reserveMeeting = ReserveMeeting::where('meeting_time_id', $meetingTime->id)
+                            ->where('day', $day)
+                            ->first();
 
-                    if ($meeting->creator_id == $user->id) {
-                        $toastData = [
-                            'title' => trans('public.request_failed'),
-                            'msg' => trans('update.cant_reserve_your_appointment'),
-                            'status' => 'error'
-                        ];
-                        return response()->json($toastData);
-                    }
-
-                    if (!empty($meeting) and !$meeting->disabled) {
-                        if (!empty($meeting->amount) and $meeting->amount > 0) {
-
-                            $reserveMeeting = ReserveMeeting::where('meeting_time_id', $meetingTime->id)
-                                ->where('day', $day)
-                                ->first();
-
-                            if (!empty($reserveMeeting) and $reserveMeeting->locked_at) {
-                                $toastData = [
-                                    'title' => trans('public.request_failed'),
-                                    'msg' => trans('meeting.locked_time'),
-                                    'status' => 'error'
-                                ];
-                                return response()->json($toastData);
-                            }
-
-                            if (!empty($reserveMeeting) and $reserveMeeting->reserved_at) {
-                                $toastData = [
-                                    'title' => trans('public.request_failed'),
-                                    'msg' => trans('meeting.reserved_time'),
-                                    'status' => 'error'
-                                ];
-                                return response()->json($toastData);
-                            }
-
-                            $hourlyAmountResult = $this->handleHourlyMeetingAmount($meeting, $meetingTime, $studentCount, $selectedMeetingType);
-
-                            if (!$hourlyAmountResult['status']) {
-                                return $hourlyAmountResult['result']; // json response
-                            }
-
-                            $hourlyAmount = $hourlyAmountResult['result'];
-
-                            $explodetime = explode('-', $meetingTime->time);
-
-                            $hours = (strtotime($explodetime[1]) - strtotime($explodetime[0])) / 3600;
-
-                            $instructorTimezone = $meeting->getTimezone();
-
-                            $startAt = $this->handleUtcDate($day, $explodetime[0], $instructorTimezone);
-                            $endAt = $this->handleUtcDate($day, $explodetime[1], $instructorTimezone);
-
-                            $reserveMeeting = ReserveMeeting::updateOrCreate([
-                                'user_id' => $user->id,
-                                'meeting_time_id' => $meetingTime->id,
-                                'meeting_id' => $meetingTime->meeting_id,
-                                'status' => ReserveMeeting::$pending,
-                                'day' => $day,
-                                'meeting_type' => $selectedMeetingType,
-                                'student_count' => $studentCount
-                            ], [
-                                'date' => strtotime($day),
-                                'start_at' => $startAt,
-                                'end_at' => $endAt,
-                                'paid_amount' => (!empty($hourlyAmount) and $hourlyAmount > 0) ? $hourlyAmount * $hours : 0,
-                                'discount' => $meetingTime->meeting->discount,
-                                'description' => $description,
-                                'created_at' => time(),
-                            ]);
-
-                            $cart = Cart::where('creator_id', $user->id)
-                                ->where('reserve_meeting_id', $reserveMeeting->id)
-                                ->first();
-
-                            if (empty($cart)) {
-                                Cart::create([
-                                    'creator_id' => $user->id,
-                                    'reserve_meeting_id' => $reserveMeeting->id,
-                                    'created_at' => time()
-                                ]);
-                            }
-
+                        if (!empty($reserveMeeting) and $reserveMeeting->locked_at) {
                             $toastData = [
-                                'status' => 'success',
-                                'title' => trans('public.request_success'),
-                                'msg' => trans('update.meeting_added_to_cart'),
-                                'redirect' => '/cart'
+                                'title' => trans('public.request_failed'),
+                                'msg' => trans('meeting.locked_time'),
+                                'status' => 'error'
                             ];
                             return response()->json($toastData);
-                        } else {
-                            return $this->handleFreeMeetingReservation($user, $meeting, $meetingTime, $day, $selectedMeetingType, $studentCount);
                         }
-                    } else {
+
+                        if (!empty($reserveMeeting) and $reserveMeeting->reserved_at) {
+                            $toastData = [
+                                'title' => trans('public.request_failed'),
+                                'msg' => trans('meeting.reserved_time'),
+                                'status' => 'error'
+                            ];
+                            return response()->json($toastData);
+                        }
+
+                        $hourlyAmountResult = $this->handleHourlyMeetingAmount($meeting, $meetingTime, $studentCount, $selectedMeetingType);
+
+                        if (!$hourlyAmountResult['status']) {
+                            return $hourlyAmountResult['result']; // json response
+                        }
+
+                        $hourlyAmount = $hourlyAmountResult['result'];
+
+                        $explodetime = explode('-', $meetingTime->time);
+
+                        $hours = (strtotime($explodetime[1]) - strtotime($explodetime[0])) / 3600;
+
+                        $instructorTimezone = $meeting->getTimezone();
+
+                        $startAt = $this->handleUtcDate($day, $explodetime[0], $instructorTimezone);
+                        $endAt = $this->handleUtcDate($day, $explodetime[1], $instructorTimezone);
+
+                        $reserveMeeting = ReserveMeeting::updateOrCreate([
+                            'user_id' => $user->id,
+                            'meeting_time_id' => $meetingTime->id,
+                            'meeting_id' => $meetingTime->meeting_id,
+                            'status' => ReserveMeeting::$pending,
+                            'day' => $day,
+                            'meeting_type' => $selectedMeetingType,
+                            'student_count' => $studentCount
+                        ], [
+                            'date' => strtotime($day),
+                            'start_at' => $startAt,
+                            'end_at' => $endAt,
+                            'paid_amount' => (!empty($hourlyAmount) and $hourlyAmount > 0) ? $hourlyAmount * $hours : 0,
+                            'discount' => $meetingTime->meeting->discount,
+                            'description' => $description,
+                            'created_at' => time(),
+                        ]);
+
+                        $cart = Cart::where('creator_id', $user->id)
+                            ->where('reserve_meeting_id', $reserveMeeting->id)
+                            ->first();
+
+                        if (empty($cart)) {
+                            Cart::create([
+                                'creator_id' => $user->id,
+                                'reserve_meeting_id' => $reserveMeeting->id,
+                                'created_at' => time()
+                            ]);
+                        }
+
                         $toastData = [
-                            'title' => trans('public.request_failed'),
-                            'msg' => trans('meeting.meeting_disabled'),
-                            'status' => 'error'
+                            'status' => 'success',
+                            'title' => trans('public.request_success'),
+                            'msg' => trans('update.meeting_added_to_cart'),
+                            'redirect' => '/cart'
                         ];
                         return response()->json($toastData);
+                    } else {
+                        return $this->handleFreeMeetingReservation($user, $meeting, $meetingTime, $day, $selectedMeetingType, $studentCount);
                     }
+                } else {
+                    $toastData = [
+                        'title' => trans('public.request_failed'),
+                        'msg' => trans('meeting.meeting_disabled'),
+                        'status' => 'error'
+                    ];
+                    return response()->json($toastData);
                 }
             }
-
-            $toastData = [
-                'title' => trans('public.request_failed'),
-                'msg' => trans('meeting.select_time_to_reserve'),
-                'status' => 'error'
-            ];
-            return response()->json($toastData);
         }
 
         $toastData = [
             'title' => trans('public.request_failed'),
-            'msg' => trans('public.not_login_toast_msg_lang'),
+            'msg' => trans('meeting.select_time_to_reserve'),
             'status' => 'error'
         ];
         return response()->json($toastData);

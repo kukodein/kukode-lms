@@ -19,9 +19,4 @@ class Noticeboard extends Model
     {
         return $this->hasOne('App\Models\NoticeboardStatus', 'noticeboard_id', 'id');
     }
-
-    public function webinar()
-    {
-        return $this->belongsTo('App\Models\Webinar', 'webinar_id', 'id');
-    }
 }

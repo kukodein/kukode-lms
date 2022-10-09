@@ -6,7 +6,6 @@ use App\Exports\salesExport;
 use App\Http\Controllers\Controller;
 use App\Models\Accounting;
 use App\Models\Order;
-use App\Models\ReserveMeeting;
 use App\Models\Sale;
 use App\Models\SaleLog;
 use App\Models\Webinar;
@@ -20,7 +19,7 @@ class SaleController extends Controller
     {
         $this->authorize('admin_sales_list');
 
-        $query = Sale::whereNull('product_order_id');
+        $query = Sale::query();
 
         $totalSales = [
             'count' => deepClone($query)->count(),
@@ -93,14 +92,12 @@ class SaleController extends Controller
 
     private function makeTitle($sale)
     {
-        if (!empty($sale->webinar_id) or !empty($sale->bundle_id)) {
-            $item = !empty($sale->webinar_id) ? $sale->webinar : $sale->bundle;
-
-            $sale->item_title = $item ? $item->title : trans('update.deleted_item');
-            $sale->item_id = $item ? $item->id : '';
-            $sale->item_seller = ($item and $item->creator) ? $item->creator->full_name : trans('update.deleted_item');
-            $sale->seller_id = ($item and $item->creator) ? $item->creator->id : '';
-            $sale->sale_type = ($item and $item->creator) ? $item->creator->id : '';
+        if (!empty($sale->webinar_id)) {
+            $sale->item_title = $sale->webinar ? $sale->webinar->title : trans('update.deleted_item');
+            $sale->item_id = $sale->webinar_id;
+            $sale->item_seller = ($sale->webinar and $sale->webinar->creator) ? $sale->webinar->creator->full_name : trans('update.deleted_item');
+            $sale->seller_id = ($sale->webinar and $sale->webinar->creator) ? $sale->webinar->creator->id : '';
+            $sale->sale_type = ($sale->webinar and $sale->webinar->creator) ? $sale->webinar->creator->id : '';
         } elseif (!empty($sale->meeting_id)) {
             $sale->item_title = trans('panel.meeting');
             $sale->item_id = $sale->meeting_id;
@@ -114,11 +111,6 @@ class SaleController extends Controller
         } elseif (!empty($sale->promotion_id)) {
             $sale->item_title = !empty($sale->promotion) ? $sale->promotion->title : trans('update.deleted_promotion');
             $sale->item_id = $sale->promotion_id;
-            $sale->item_seller = 'Admin';
-            $sale->seller_id = '';
-        } elseif (!empty($sale->registration_package_id)) {
-            $sale->item_title = !empty($sale->registrationPackage) ? $sale->registrationPackage->title : 'Deleted registration Package';
-            $sale->item_id = $sale->registration_package_id;
             $sale->item_seller = 'Admin';
             $sale->seller_id = '';
         } else {
@@ -154,8 +146,6 @@ class SaleController extends Controller
                 $query->whereNull('refund_at');
             } elseif ($status == 'refund') {
                 $query->whereNotNull('refund_at');
-            } elseif ($status == 'blocked') {
-                $query->where('access_to_purchased_item', false);
             }
         }
 
@@ -202,18 +192,6 @@ class SaleController extends Controller
             $order = Order::findOrFail($sale->order_id);
 
             Accounting::refundAccounting($order);
-        }
-
-        if (!empty($sale->meeting_id) and $sale->type == Sale::$meeting) {
-            $appointment = ReserveMeeting::where('meeting_id', $sale->meeting_id)
-                ->where('sale_id', $sale->id)
-                ->first();
-
-            if (!empty($appointment)) {
-                $appointment->update([
-                    'status' => ReserveMeeting::$canceled
-                ]);
-            }
         }
 
         $sale->update(['refund_at' => time()]);

@@ -61,8 +61,7 @@ class SubscribesController extends Controller
             'days' => $data['days'],
             'price' => $data['price'],
             'icon' => $data['icon'],
-            'is_popular' => (!empty($data['is_popular']) and $data['is_popular'] == '1'),
-            'infinite_use' => (!empty($data['infinite_use']) and $data['infinite_use'] == '1'),
+            'is_popular' => !empty($data['is_popular']) ? $data['is_popular'] : false,
             'created_at' => time(),
         ]);
 
@@ -116,8 +115,7 @@ class SubscribesController extends Controller
             'days' => $data['days'],
             'price' => $data['price'],
             'icon' => $data['icon'],
-            'is_popular' => (!empty($data['is_popular']) and $data['is_popular'] == '1'),
-            'infinite_use' => (!empty($data['infinite_use']) and $data['infinite_use'] == '1'),
+            'is_popular' => !empty($data['is_popular']) ? $data['is_popular'] : false,
             'created_at' => time(),
         ]);
 

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Traits\SequenceContent;
 use Illuminate\Database\Eloquent\Model;
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
 use Astrotomic\Translatable\Translatable;
@@ -10,7 +9,6 @@ use Astrotomic\Translatable\Translatable;
 class WebinarChapter extends Model implements TranslatableContract
 {
     use Translatable;
-    use SequenceContent;
 
     protected $table = 'webinar_chapters';
     public $timestamps = false;
@@ -51,19 +49,9 @@ class WebinarChapter extends Model implements TranslatableContract
         return $this->hasMany('App\Models\TextLesson', 'chapter_id', 'id');
     }
 
-    public function assignments()
-    {
-        return $this->hasMany('App\Models\WebinarAssignment', 'chapter_id', 'id');
-    }
-
     public function quizzes()
     {
         return $this->hasMany('App\Models\Quiz', 'chapter_id', 'id');
-    }
-
-    public function chapterItems()
-    {
-        return $this->hasMany('App\Models\WebinarChapterItem', 'chapter_id', 'id');
     }
 
     public function webinar()
@@ -73,30 +61,41 @@ class WebinarChapter extends Model implements TranslatableContract
 
     public function getDuration()
     {
+        $type = $this->type;
         $time = 0;
 
-        $time += $this->sessions->sum('duration');
-
-        $time += $this->textLessons->sum('study_time');
+        switch ($type) {
+            case self::$chapterFile:
+                $time = 0;
+                break;
+            case self::$chapterSession:
+                $time = $this->sessions->sum('duration');
+                break;
+            case self::$chapterTextLesson:
+                $time = $this->textLessons->sum('study_time');
+                break;
+        }
 
         return $time;
     }
 
 
-    public function getTopicsCount($withQuiz = false)
+    public function getTopicsCount()
     {
+        $type = $this->type;
         $count = 0;
 
-        $count += $this->files->where('status', 'active')->count();
-        $count += $this->sessions->where('status', 'active')->count();
-        $count += $this->textLessons->where('status', 'active')->count();
-        $count += $this->assignments->where('status', 'active')->count();
-
-        if ($withQuiz) {
-            $count += $this->quizzes->where('status', 'active')->count();
+        switch ($type) {
+            case self::$chapterFile:
+                $count = $this->files->count();
+                break;
+            case self::$chapterSession:
+                $count = $this->sessions->count();
+                break;
+            case self::$chapterTextLesson:
+                $count = $this->textLessons->count();
+                break;
         }
-
-
 
         return $count;
     }

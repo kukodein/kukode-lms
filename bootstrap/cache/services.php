@@ -69,8 +69,6 @@
     65 => 'Jorenvh\\Share\\Providers\\ShareServiceProvider',
     66 => 'KingFlamez\\Rave\\RaveServiceProvider',
     67 => 'App\\Providers\\MinioStorageServiceProvider',
-    68 => 'Gathuku\\Mpesa\\MpesaServiceProvider',
-    69 => 'Ssheduardo\\Redsys\\RedsysServiceProvider',
   ),
   'eager' => 
   array (
@@ -127,8 +125,6 @@
     50 => 'Jorenvh\\Share\\Providers\\ShareServiceProvider',
     51 => 'KingFlamez\\Rave\\RaveServiceProvider',
     52 => 'App\\Providers\\MinioStorageServiceProvider',
-    53 => 'Gathuku\\Mpesa\\MpesaServiceProvider',
-    54 => 'Ssheduardo\\Redsys\\RedsysServiceProvider',
   ),
   'deferred' => 
   array (

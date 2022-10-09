@@ -13,10 +13,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/mobile-app', 'Web\MobileAppController@index')->middleware(['share'])->name('mobileAppRoute');
-
-
-Route::group(['namespace' => 'Auth', 'middleware' => ['check_mobile_app', 'share']], function () {
+Route::group(['namespace' => 'Auth', 'middleware' => ['share']], function () {
     Route::get('/login', 'LoginController@showLoginForm');
     Route::post('/login', 'LoginController@login');
     Route::get('/logout', 'LoginController@logout');
@@ -27,7 +24,7 @@ Route::group(['namespace' => 'Auth', 'middleware' => ['check_mobile_app', 'share
     Route::get('/verification/resend', 'VerificationController@resendCode');
     Route::get('/forget-password', 'ForgotPasswordController@showLinkRequestForm');
     Route::post('/send-email', 'ForgotPasswordController@forgot');
-    Route::get('reset-password/{token}', 'ResetPasswordController@showResetForm');
+    Route::get('reset-password/{token}', 'ResetPasswordController@getPassword');
     Route::post('/reset-password', 'ResetPasswordController@updatePassword');
     Route::get('/google', 'SocialiteController@redirectToGoogle');
     Route::get('/google/callback', 'SocialiteController@handleGoogleCallback');
@@ -36,7 +33,8 @@ Route::group(['namespace' => 'Auth', 'middleware' => ['check_mobile_app', 'share
     Route::get('/reff/{code}', 'ReferralController@referral');
 });
 
-Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impersonate', 'share']], function () {
+
+Route::group(['namespace' => 'Web', 'middleware' => ['impersonate', 'share']], function () {
     Route::get('/stripe', function () {
         return view('web.default.cart.channels.stripe');
     });
@@ -48,8 +46,6 @@ Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impers
     Route::post('/locale', 'LocaleController@setLocale');
 
     Route::get('/', 'HomeController@index');
-
-    Route::get('/getDefaultAvatar', 'DefaultAvatarController@make');
 
     Route::group(['prefix' => 'course'], function () {
         Route::get('/{slug}', 'WebinarController@course');
@@ -66,30 +62,6 @@ Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impers
         Route::group(['middleware' => 'web.auth'], function () {
             Route::post('/learning/itemInfo', 'LearningPageController@getItemInfo');
             Route::get('/learning/{slug}', 'LearningPageController@index');
-            Route::get('/learning/{slug}/noticeboards', 'LearningPageController@noticeboards');
-            Route::get('/assignment/{assignmentId}/download/{id}/attach', 'LearningPageController@downloadAssignment');
-            Route::post('/assignment/{assignmentId}/history/{historyId}/message', 'AssignmentHistoryController@storeMessage');
-            Route::post('/assignment/{assignmentId}/history/{historyId}/setGrade', 'AssignmentHistoryController@setGrade');
-            Route::get('/assignment/{assignmentId}/history/{historyId}/message/{messageId}/downloadAttach', 'AssignmentHistoryController@downloadAttach');
-
-            Route::group(['prefix' => '/learning/{slug}/forum'], function () { // LearningPageForumTrait
-                Route::get('/', 'LearningPageController@forum');
-                Route::post('/store', 'LearningPageController@forumStoreNewQuestion');
-                Route::get('/{forumId}/edit', 'LearningPageController@getForumForEdit');
-                Route::post('/{forumId}/update', 'LearningPageController@updateForum');
-                Route::post('/{forumId}/pinToggle', 'LearningPageController@forumPinToggle');
-                Route::get('/{forumId}/downloadAttach', 'LearningPageController@forumDownloadAttach');
-
-                Route::group(['prefix' => '/{forumId}/answers'], function () {
-                    Route::get('/', 'LearningPageController@getForumAnswers');
-                    Route::post('/', 'LearningPageController@storeForumAnswers');
-                    Route::get('/{answerId}/edit', 'LearningPageController@answerEdit');
-                    Route::post('/{answerId}/update', 'LearningPageController@answerUpdate');
-                    Route::post('/{answerId}/{togglePinOrResolved}', 'LearningPageController@answerTogglePinOrResolved');
-                });
-            });
-
-            Route::post('/direct-payment', 'WebinarController@directPayment');
         });
     });
 
@@ -138,6 +110,10 @@ Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impers
             Route::post('/checkout', 'CartController@checkout')->name('checkout');
         });
 
+        Route::group(['prefix' => 'meetings'], function () {
+            Route::post('/reserve', 'MeetingController@reserve');
+        });
+
         Route::group(['prefix' => 'users'], function () {
             Route::get('/{id}/follow', 'UserController@followToggle');
         });
@@ -148,10 +124,6 @@ Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impers
             Route::post('/', 'BecomeInstructorController@store');
         });
 
-    });
-
-    Route::group(['prefix' => 'meetings'], function () {
-        Route::post('/reserve', 'MeetingController@reserve');
     });
 
     Route::group(['prefix' => 'users'], function () {
@@ -165,12 +137,10 @@ Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impers
         Route::get('/verify/{gateway}', ['as' => 'payment_verify', 'uses' => 'PaymentController@paymentVerify']);
         Route::post('/verify/{gateway}', ['as' => 'payment_verify_post', 'uses' => 'PaymentController@paymentVerify']);
         Route::get('/status', 'PaymentController@payStatus');
-        Route::get('/payku/callback/{id}', 'PaymentController@paykuPaymentVerify')->name('payku.result');
     });
 
     Route::group(['prefix' => 'subscribes'], function () {
         Route::get('/apply/{webinarSlug}', 'SubscribeController@apply');
-        Route::get('/apply/bundle/{bundleSlug}', 'SubscribeController@bundleApply');
     });
 
     Route::group(['prefix' => 'search'], function () {
@@ -238,71 +208,6 @@ Route::group(['namespace' => 'Web', 'middleware' => ['check_mobile_app', 'impers
     Route::group(['prefix' => 'instructor-finder'], function () {
         Route::get('/', 'InstructorFinderController@index');
         Route::get('/wizard', 'InstructorFinderController@wizard');
-    });
-
-    Route::group(['prefix' => 'products'], function () {
-        Route::get('/', 'ProductController@searchLists');
-        Route::get('/{slug}', 'ProductController@show');
-        Route::post('/{slug}/points/apply', 'ProductController@buyWithPoint');
-
-        Route::group(['prefix' => 'reviews'], function () {
-            Route::post('/store', 'ProductReviewController@store');
-            Route::post('/store-reply-comment', 'ProductReviewController@storeReplyComment');
-            Route::get('/{id}/delete', 'ProductReviewController@destroy');
-            Route::get('/{id}/delete-comment/{commentId}', 'ProductReviewController@destroy');
-        });
-    });
-
-    Route::get('/reward-products', 'RewardProductsController@index');
-
-    Route::group(['prefix' => 'bundles'], function () {
-        Route::get('/{slug}', 'BundleController@index');
-        Route::get('/{slug}/free', 'BundleController@free');
-
-        Route::group(['middleware' => 'web.auth'], function () {
-            Route::get('/{slug}/favorite', 'BundleController@favoriteToggle');
-            Route::get('/{slug}/points/apply', 'BundleController@buyWithPoint');
-
-            Route::group(['prefix' => 'reviews'], function () {
-                Route::post('/store', 'BundleReviewController@store');
-                Route::post('/store-reply-comment', 'BundleReviewController@storeReplyComment');
-                Route::get('/{id}/delete', 'BundleReviewController@destroy');
-                Route::get('/{id}/delete-comment/{commentId}', 'BundleReviewController@destroy');
-            });
-        });
-    });
-
-    Route::group(['prefix' => 'forums'], function () {
-        Route::get('/', 'ForumController@index');
-        Route::get('/create-topic', 'ForumController@createTopic');
-        Route::post('/create-topic', 'ForumController@storeTopic');
-        Route::get('/search', 'ForumController@search');
-
-        Route::group(['prefix' => '/{slug}/topics'], function () {
-            Route::get('/', 'ForumController@topics');
-            Route::post('/{topic_slug}/likeToggle', 'ForumController@topicLikeToggle');
-            Route::get('/{topic_slug}/edit', 'ForumController@topicEdit');
-            Route::post('/{topic_slug}/edit', 'ForumController@topicUpdate');
-            Route::post('/{topic_slug}/bookmark', 'ForumController@topicBookmarkToggle');
-            Route::get('/{topic_slug}/downloadAttachment/{attachment_id}', 'ForumController@topicDownloadAttachment');
-
-            Route::group(['prefix' => '/{topic_slug}/posts'], function () {
-                Route::get('/', 'ForumController@posts');
-                Route::post('/', 'ForumController@storePost');
-                Route::post('/report', 'ForumController@storeTopicReport');
-                Route::get('/{post_id}/edit', 'ForumController@postEdit');
-                Route::post('/{post_id}/edit', 'ForumController@postUpdate');
-                Route::post('/{post_id}/likeToggle', 'ForumController@postLikeToggle');
-                Route::post('/{post_id}/un_pin', 'ForumController@postUnPin');
-                Route::post('/{post_id}/pin', 'ForumController@postPin');
-                Route::get('/{post_id}/downloadAttachment', 'ForumController@postDownloadAttachment');
-            });
-        });
-    });
-
-    Route::group(['prefix' => 'cookie-security'], function () {
-        Route::post('/all', 'CookieSecurityController@setAll');
-        Route::post('/customize', 'CookieSecurityController@setCustomize');
     });
 });
 

@@ -4,9 +4,12 @@ namespace App\Http\Middleware;
 
 use App\Http\Controllers\Web\CartManagerController;
 use App\Models\Cart;
+use App\Models\Page;
 use Closure;
+use http\Cookie;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Session;
+use League\Flysystem\Config;
 
 class Share
 {

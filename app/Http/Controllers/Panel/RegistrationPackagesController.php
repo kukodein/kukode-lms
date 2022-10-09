@@ -7,7 +7,6 @@ use App\Mixins\RegistrationPackage\UserPackage;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentChannel;
-use App\Models\Product;
 use App\Models\RegistrationPackage;
 use App\Models\Webinar;
 use Illuminate\Http\Request;
@@ -65,14 +64,12 @@ class RegistrationPackagesController extends Controller
 
         $myCoursesCount = Webinar::where('creator_id', $user->id)->count();
         $myMeetingCount = !empty($user->meeting) ? $user->meeting->meetingTimes()->count() : 0;
-        $myProductCount = Product::where('creator_id', $user->id)->count();
 
         return [
             'myInstructorsCount' => $myInstructorsCount,
             'myStudentsCount' => $myStudentsCount,
             'myCoursesCount' => $myCoursesCount,
             'myMeetingCount' => $myMeetingCount,
-            'myProductCount' => $myProductCount,
         ];
     }
 
