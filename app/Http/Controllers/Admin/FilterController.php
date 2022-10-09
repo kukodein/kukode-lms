@@ -179,6 +179,7 @@ class FilterController extends Controller
                         ]);
                     } else {
                         $option = FilterOption::create([
+                            'title' => $filterOption['title'],
                             'filter_id' => $filter->id,
                             'order' => $order,
                         ]);

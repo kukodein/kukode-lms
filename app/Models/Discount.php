@@ -11,12 +11,11 @@ class Discount extends Model
     protected $guarded = ['id'];
     static $discountUserTypes = ['all_users', 'special_users'];
 
-    static $discountSource = ['all', 'course', 'category', 'meeting', 'product'];
+    static $discountSource = ['all', 'course', 'category', 'meeting'];
     static $discountSourceAll = 'all';
     static $discountSourceCourse = 'course';
     static $discountSourceCategory = 'category';
     static $discountSourceMeeting = 'meeting';
-    static $discountSourceProduct = 'product';
 
     static $discountTypes = ['percentage', 'fixed_amount'];
     static $discountTypePercentage = 'percentage';
@@ -96,24 +95,6 @@ class Discount extends Model
 
             if (!$hasSpecialWebinars) {
                 return trans('update.your_coupon_is_valid_for_another_course');
-            }
-        }
-
-        if ($this->source == self::$discountSourceProduct) {
-            $hasSpecialProducts = false;
-
-            foreach ($carts as $cart) {
-                if (!empty($cart->productOrder)) {
-                    $product = $cart->productOrder->product;
-
-                    if (!empty($product) and ($this->product_type == 'all' or $this->product_type == $product->type)) {
-                        $hasSpecialProducts = true;
-                    }
-                }
-            }
-
-            if (!$hasSpecialProducts) {
-                return trans('update.your_coupon_is_valid_for_another_products_type');
             }
         }
 

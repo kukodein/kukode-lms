@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\Role;
 use App\Models\Webinar;
 use App\User;
@@ -26,15 +25,6 @@ class SearchController extends Controller
                         $query->select('id', 'full_name', 'avatar');
                     },
                     'reviews'
-                ])
-                ->get();
-
-            $products = Product::where('status', 'active')
-                ->whereTranslationLike('title', "%$search%")
-                ->with([
-                    'creator' => function ($query) {
-                        $query->select('id', 'full_name', 'avatar');
-                    }
                 ])
                 ->get();
 
@@ -65,8 +55,7 @@ class SearchController extends Controller
                 'resultCount' => count($webinars) + count($teachers) + count($organizations),
                 'webinars' => $webinars,
                 'teachers' => $teachers,
-                'organizations' => $organizations,
-                'products' => $products,
+                'organizations' => $organizations
             ];
         }
 

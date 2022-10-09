@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
-use App\Models\Bundle;
 use App\Models\Faq;
 use App\Models\Translation\FaqTranslation;
 use App\Models\Webinar;
@@ -16,10 +15,10 @@ class FAQController extends Controller
     {
         $user = auth()->user();
         $data = $request->get('ajax')['new'];
-        $canStore = false;
 
         $validator = Validator::make($data, [
-            'title' => 'required|max:255',
+            'title' => 'required|max:64',
+            'webinar_id' => 'required',
             'answer' => 'required',
         ]);
 
@@ -30,26 +29,12 @@ class FAQController extends Controller
             ], 422);
         }
 
-        if (!empty($data['webinar_id'])) {
-            $webinar = Webinar::find($data['webinar_id']);
+        $webinar = Webinar::find($data['webinar_id']);
 
-            if (!empty($webinar) and $webinar->canAccess($user)) {
-                $canStore = true;
-            }
-        } elseif (!empty($data['bundle_id'])) {
-            $bundle = Bundle::find($data['bundle_id']);
-
-            if (!empty($bundle) and $bundle->canAccess($user)) {
-                $canStore = true;
-            }
-        }
-
-
-        if ($canStore) {
+        if (!empty($webinar) and $webinar->canAccess($user)) {
             $faq = Faq::create([
+                'webinar_id' => $data['webinar_id'],
                 'creator_id' => $user->id,
-                'webinar_id' => !empty($data['webinar_id']) ? $data['webinar_id'] : null,
-                'bundle_id' => !empty($data['bundle_id']) ? $data['bundle_id'] : null,
                 'created_at' => time()
             ]);
 
@@ -76,10 +61,9 @@ class FAQController extends Controller
         $user = auth()->user();
         $data = $request->get('ajax')[$id];
 
-        $canStore = false;
-
         $validator = Validator::make($data, [
-            'title' => 'required|max:255',
+            'title' => 'required|max:64',
+            'webinar_id' => 'required',
             'answer' => 'required',
         ]);
 
@@ -90,21 +74,9 @@ class FAQController extends Controller
             ], 422);
         }
 
-        if (!empty($data['webinar_id'])) {
-            $webinar = Webinar::find($data['webinar_id']);
+        $webinar = Webinar::find($data['webinar_id']);
 
-            if (!empty($webinar) and $webinar->canAccess($user)) {
-                $canStore = true;
-            }
-        } elseif (!empty($data['bundle_id'])) {
-            $bundle = Bundle::find($data['bundle_id']);
-
-            if (!empty($bundle) and $bundle->canAccess($user)) {
-                $canStore = true;
-            }
-        }
-
-        if ($canStore) {
+        if (!empty($webinar) and $webinar->canAccess($user)) {
 
             $faq = Faq::where('id', $id)
                 ->where('creator_id', $user->id)
@@ -112,6 +84,7 @@ class FAQController extends Controller
 
             if (!empty($faq)) {
                 $faq->update([
+                    'webinar_id' => $data['webinar_id'],
                     'updated_at' => time()
                 ]);
 

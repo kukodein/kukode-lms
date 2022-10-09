@@ -66,6 +66,12 @@ class Channel implements IChannel
             $order->update(['status' => Order::$fail]);
         }
 
-        return null;
+        $toastData = [
+            'title' => trans('cart.fail_purchase'),
+            'msg' => trans('cart.gateway_error'),
+            'status' => 'error'
+        ];
+
+        return back()->with(['toast' => $toastData])->withInput();
     }
 }

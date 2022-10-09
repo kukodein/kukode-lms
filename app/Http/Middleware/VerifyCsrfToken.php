@@ -14,6 +14,5 @@ class VerifyCsrfToken extends Middleware
     protected $except = [
         '/payments/verify/Iyzipay',
         '/payments/verify/Paytm',
-        '/payments/verify/JazzCash',
     ];
 }

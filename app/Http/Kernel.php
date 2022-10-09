@@ -3,7 +3,6 @@
 namespace App\Http;
 
 use App\Http\Middleware\AdminAuthenticate;
-use App\Http\Middleware\CheckMobileApp;
 use App\Http\Middleware\Impersonate;
 use App\Http\Middleware\PanelAuthenticate;
 use App\Http\Middleware\Share;
@@ -45,7 +44,6 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\UserLocale::class,
-            \App\Http\Middleware\DebugBar::class
         ],
 
         'api' => [
@@ -78,6 +76,11 @@ class Kernel extends HttpKernel
         'web.auth' => WebAuthenticate::class,
         'impersonate' => Impersonate::class,
         'share' => Share::class,
-        'check_mobile_app' => CheckMobileApp::class,
+        'api.auth' => \App\Http\Middleware\Api\Authenticate::class,
+        'api.request.type' => \App\Http\Middleware\Api\RequestType::class,
+        'api.check.key' => \App\Http\Middleware\Api\CheckApiKey::class
+
+
+
     ];
 }

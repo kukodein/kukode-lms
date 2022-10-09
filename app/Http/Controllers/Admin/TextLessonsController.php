@@ -8,7 +8,6 @@ use App\Models\TextLesson;
 use App\Models\TextLessonAttachment;
 use App\Models\Translation\TextLessonTranslation;
 use App\Models\Webinar;
-use App\Models\WebinarChapterItem;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Validator;
@@ -19,7 +18,7 @@ class TextLessonsController extends Controller
     {
         $this->authorize('admin_webinars_edit');
 
-        $data = $request->get('ajax')['new'];
+        $data = $request->all();
 
         $validator = Validator::make($data, [
             'webinar_id' => 'required',
@@ -38,14 +37,6 @@ class TextLessonsController extends Controller
             ], 422);
         }
 
-        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
-            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
-            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
-        } else {
-            $data['check_previous_parts'] = false;
-            $data['access_after_day'] = null;
-        }
-
         $lessonsCount = TextLesson::where('webinar_id', $data['webinar_id'])->count();
 
         $webinar = Webinar::where('id', $data['webinar_id'])->first();
@@ -59,8 +50,6 @@ class TextLessonsController extends Controller
                 'study_time' => $data['study_time'],
                 'accessibility' => $data['accessibility'],
                 'order' => $lessonsCount + 1,
-                'check_previous_parts' => $data['check_previous_parts'],
-                'access_after_day' => $data['access_after_day'],
                 'status' => (!empty($data['status']) and $data['status'] == 'on') ? TextLesson::$Active : TextLesson::$Inactive,
                 'created_at' => time(),
             ]);
@@ -80,10 +69,6 @@ class TextLessonsController extends Controller
                     $attachments = $data['attachments'];
                     $this->saveAttachments($textLesson, $attachments);
                 }
-
-                if (!empty($textLesson->chapter_id)) {
-                    WebinarChapterItem::makeItem($webinar->creator_id, $textLesson->chapter_id, $textLesson->id, WebinarChapterItem::$chapterTextLesson);
-                }
             }
 
             return response()->json([
@@ -94,11 +79,36 @@ class TextLessonsController extends Controller
         return response()->json([], 422);
     }
 
+    public function edit(Request $request, $id)
+    {
+        $this->authorize('admin_webinars_edit');
+
+        $testLesson = TextLesson::where('id', $id)->first();
+
+        if (!empty($testLesson)) {
+            $locale = $request->get('locale', app()->getLocale());
+            if (empty($locale)) {
+                $locale = app()->getLocale();
+            }
+            storeContentLocale($locale, $testLesson->getTable(), $testLesson->id);
+
+            $testLesson->title = $testLesson->getTitleAttribute();
+            $testLesson->summary = $testLesson->getSummaryAttribute();
+            $testLesson->content = $testLesson->getContentAttribute();
+            $testLesson->attachments = $testLesson->attachments->toArray();
+            $testLesson->locale = mb_strtoupper($locale);
+        }
+
+        return response()->json([
+            'testLesson' => $testLesson
+        ]);
+    }
+
     public function update(Request $request, $id)
     {
         $this->authorize('admin_webinars_edit');
 
-        $data = $request->get('ajax')[$id];
+        $data = $request->all();
 
         $validator = Validator::make($data, [
             'webinar_id' => 'required',
@@ -117,14 +127,6 @@ class TextLessonsController extends Controller
             ], 422);
         }
 
-        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
-            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
-            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
-        } else {
-            $data['check_previous_parts'] = false;
-            $data['access_after_day'] = null;
-        }
-
         $textLesson = TextLesson::where('id', $id)
             ->first();
 
@@ -134,8 +136,6 @@ class TextLessonsController extends Controller
                 'image' => $data['image'],
                 'study_time' => $data['study_time'],
                 'accessibility' => $data['accessibility'],
-                'check_previous_parts' => $data['check_previous_parts'],
-                'access_after_day' => $data['access_after_day'],
                 'status' => (!empty($data['status']) and $data['status'] == 'on') ? TextLesson::$Active : TextLesson::$Inactive,
                 'updated_at' => time(),
             ]);
@@ -156,15 +156,6 @@ class TextLessonsController extends Controller
                 $this->saveAttachments($textLesson, $attachments);
             }
 
-            WebinarChapterItem::where('user_id', $textLesson->creator_id)
-                ->where('item_id', $textLesson->id)
-                ->where('type', WebinarChapterItem::$chapterTextLesson)
-                ->delete();
-
-            if (!empty($textLesson->chapter_id)) {
-                WebinarChapterItem::makeItem($textLesson->creator_id, $textLesson->chapter_id, $textLesson->id, WebinarChapterItem::$chapterTextLesson);
-            }
-
             removeContentLocale();
 
             return response()->json([
@@ -181,20 +172,13 @@ class TextLessonsController extends Controller
     {
         $this->authorize('admin_webinars_edit');
 
-        $textLesson = TextLesson::where('id', $id)->first();
+        $testLesson = TextLesson::where('id', $id)->first();
 
-        if (!empty($textLesson)) {
-            WebinarChapterItem::where('user_id', $textLesson->creator_id)
-                ->where('item_id', $textLesson->id)
-                ->where('type', WebinarChapterItem::$chapterTextLesson)
-                ->delete();
-
-            $textLesson->delete();
+        if (!empty($testLesson)) {
+            $testLesson->delete();
         }
 
-        return response()->json([
-            'code' => 200,
-        ], 200);
+        return back();
     }
 
     private function saveAttachments($textLesson, $attachments)

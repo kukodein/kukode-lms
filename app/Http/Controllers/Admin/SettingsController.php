@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Admin\traits\NavbarButtonSettings;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationTemplate;
 use App\Models\PaymentChannel;
@@ -13,8 +12,6 @@ use Illuminate\Support\Facades\Validator;
 
 class SettingsController extends Controller
 {
-    use NavbarButtonSettings;
-
     public function index()
     {
         removeContentLocale();
@@ -63,6 +60,7 @@ class SettingsController extends Controller
     {
         removeContentLocale();
 
+
         $this->authorize('admin_settings_personalization');
 
         $settings = Setting::where('name', $name)->first();
@@ -77,7 +75,6 @@ class SettingsController extends Controller
             }
 
             $locale = $request->get('locale', mb_strtolower($defaultLocal));
-
             storeContentLocale($locale, $settings->getTable(), $settings->id);
 
             if (!empty($settings->value)) {

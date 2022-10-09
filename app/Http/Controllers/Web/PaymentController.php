@@ -9,8 +9,6 @@ use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentChannel;
-use App\Models\Product;
-use App\Models\ProductOrder;
 use App\Models\ReserveMeeting;
 use App\Models\Reward;
 use App\Models\RewardAccounting;
@@ -90,7 +88,7 @@ class PaymentController extends Controller
             $channelManager = ChannelManager::makeChannel($paymentChannel);
             $redirect_url = $channelManager->paymentRequest($order);
 
-            if (in_array($paymentChannel->class_name, PaymentChannel::$gatewayIgnoreRedirect)) {
+            if (in_array($paymentChannel->class_name, ['Paytm', 'Payu', 'Zarinpal', 'Stripe', 'Paysera', 'Cashu', 'Iyzipay', 'MercadoPago'])) {
                 return $redirect_url;
             }
 
@@ -117,79 +115,45 @@ class PaymentController extends Controller
             $channelManager = ChannelManager::makeChannel($paymentChannel);
             $order = $channelManager->verify($request);
 
-            return $this->paymentOrderAfterVerify($order);
+            if (!empty($order)) {
 
-        } catch (\Exception $exception) {
-            $toastData = [
-                'title' => trans('cart.fail_purchase'),
-                'msg' => trans('cart.gateway_error'),
-                'status' => 'error'
-            ];
-            return redirect('cart')->with(['toast' => $toastData]);
-        }
-    }
+                if ($order->status == Order::$paying) {
+                    $this->setPaymentAccounting($order);
 
-    /*
-     * | this methode only run for payku.result
-     * */
-    public function paykuPaymentVerify(Request $request, $id)
-    {
-        $paymentChannel = PaymentChannel::where('class_name', PaymentChannel::$payku)
-            ->where('status', 'active')
-            ->first();
+                    $order->update(['status' => Order::$paid]);
+                } else {
+                    if ($order->type === Order::$meeting) {
+                        $orderItem = OrderItem::where('order_id', $order->id)->first();
 
-        try {
-            $channelManager = ChannelManager::makeChannel($paymentChannel);
+                        if ($orderItem && $orderItem->reserve_meeting_id) {
+                            $reserveMeeting = ReserveMeeting::where('id', $orderItem->reserve_meeting_id)->first();
 
-            $request->request->add(['transaction_id' => $id]);
-
-            $order = $channelManager->verify($request);
-
-            return $this->paymentOrderAfterVerify($order);
-
-        } catch (\Exception $exception) {
-            $toastData = [
-                'title' => trans('cart.fail_purchase'),
-                'msg' => trans('cart.gateway_error'),
-                'status' => 'error'
-            ];
-            return redirect('cart')->with(['toast' => $toastData]);
-        }
-    }
-
-    private function paymentOrderAfterVerify($order)
-    {
-        if (!empty($order)) {
-
-            if ($order->status == Order::$paying) {
-                $this->setPaymentAccounting($order);
-
-                $order->update(['status' => Order::$paid]);
-            } else {
-                if ($order->type === Order::$meeting) {
-                    $orderItem = OrderItem::where('order_id', $order->id)->first();
-
-                    if ($orderItem && $orderItem->reserve_meeting_id) {
-                        $reserveMeeting = ReserveMeeting::where('id', $orderItem->reserve_meeting_id)->first();
-
-                        if ($reserveMeeting) {
-                            $reserveMeeting->update(['locked_at' => null]);
+                            if ($reserveMeeting) {
+                                $reserveMeeting->update(['locked_at' => null]);
+                            }
                         }
                     }
                 }
+
+                session()->put($this->order_session_key, $order->id);
+
+                return redirect('/payments/status');
+            } else {
+                $toastData = [
+                    'title' => trans('cart.fail_purchase'),
+                    'msg' => trans('cart.gateway_error'),
+                    'status' => 'error'
+                ];
+                return redirect('cart')->with($toastData);
             }
 
-            session()->put($this->order_session_key, $order->id);
-
-            return redirect('/payments/status');
-        } else {
+        } catch (\Exception $exception) {
             $toastData = [
                 'title' => trans('cart.fail_purchase'),
                 'msg' => trans('cart.gateway_error'),
                 'status' => 'error'
             ];
-
-            return redirect('cart')->with($toastData);
+            return redirect('cart')->with(['toast' => $toastData]);
         }
     }
 
@@ -229,14 +193,10 @@ class PaymentController extends Controller
                             ]);
                     }
                 } else {
-                    // webinar and meeting and product and bundle
+                    // webinar and meeting
 
                     Accounting::createAccounting($orderItem, $type);
                     TicketUser::useTicket($orderItem);
-
-                    if (!empty($orderItem->product_id)) {
-                        $this->updateProductOrder($sale, $orderItem);
-                    }
                 }
             }
         }
@@ -280,30 +240,5 @@ class PaymentController extends Controller
         $meetingReserveReward = RewardAccounting::calculateScore($type);
 
         RewardAccounting::makeRewardAccounting($user->id, $meetingReserveReward, $type);
-    }
-
-    private function updateProductOrder($sale, $orderItem)
-    {
-        $product = $orderItem->product;
-
-        $status = ProductOrder::$waitingDelivery;
-
-        if ($product and $product->isVirtual()) {
-            $status = ProductOrder::$success;
-        }
-
-        ProductOrder::where('product_id', $orderItem->product_id)
-            ->where('buyer_id', $orderItem->user_id)
-            ->update([
-                'sale_id' => $sale->id,
-                'status' => $status,
-            ]);
-
-        if ($product and $product->getAvailability() < 1) {
-            $notifyOptions = [
-                '[p.title]' => $product->title,
-            ];
-            sendNotification('product_out_of_stock', $notifyOptions, $product->creator_id);
-        }
     }
 }

@@ -30,14 +30,7 @@ class SaleController extends Controller
         $query = $this->filters($query, $request);
 
         $sales = $query->orderBy('created_at', 'desc')
-            ->with([
-                'webinar',
-                'productOrder',
-                'bundle',
-                'registrationPackage',
-                'promotion',
-                'subscribe'
-            ])
+            ->with('webinar')
             ->paginate(10);
 
         $userWebinars = Webinar::select('id')

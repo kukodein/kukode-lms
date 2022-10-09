@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Blog;
 use App\Models\Comment;
 use App\Models\CommentReport;
-use App\Models\Product;
 use App\Models\Reward;
 use App\Models\RewardAccounting;
 use App\Models\Webinar;
@@ -28,9 +27,6 @@ class CommentsController extends Controller
         if ($page == 'webinars') {
             $this->item = 'webinar';
             $this->item_column = 'webinar_id';
-        } else if ($page == 'products') {
-            $this->item = 'product';
-            $this->item_column = 'product_id';
         } else {
             $this->item = 'blog';
             $this->item_column = 'blog_id';
@@ -60,7 +56,7 @@ class CommentsController extends Controller
         $data = [
             'itemRelation' => $this->item,
             'page' => $this->page,
-            'pageTitle' => trans("update.admin_{$this->page}_comments_page_title"),
+            'pageTitle' => trans('admin/pages/comments.' . ($this->page == 'webinars' ? 'classes_comments' : 'blog_comments')),
             'comments' => $comments,
             'totalComments' => $totalComments,
             'publishedComments' => $publishedComments,
@@ -71,7 +67,6 @@ class CommentsController extends Controller
         $user_ids = $request->get('user_ids');
         $webinar_ids = $request->get('webinar_ids');
         $post_ids = $request->get('post_ids');
-        $product_ids = $request->get('product_ids');
 
         if (!empty($user_ids)) {
             $data['users'] = User::select('id', 'full_name')->whereIn('id', $user_ids)->get();
@@ -85,10 +80,6 @@ class CommentsController extends Controller
             $data['blog'] = Blog::select('id')->whereIn('id', $post_ids)->get();
         }
 
-        if (!empty($product_ids)) {
-            $data['products'] = Product::select('id')->whereIn('id', $product_ids)->get();
-        }
-
         return view('admin.comments.comments', $data);
     }
 
@@ -99,7 +90,6 @@ class CommentsController extends Controller
         $webinar_ids = $request->get('webinar_ids', null);
         $user_ids = $request->get('user_ids', null);
         $post_ids = $request->get('post_ids', null);
-        $product_ids = $request->get('product_ids', null);
         $status = $request->get('status', null);
 
         if (!empty($title)) {
@@ -123,11 +113,7 @@ class CommentsController extends Controller
         }
 
         if (!empty($post_ids)) {
-            $query->whereIn('blog_id', $post_ids);
-        }
-
-        if (!empty($product_ids)) {
-            $query->whereIn('product_id', $product_ids);
+            $query->whereIn('id', $post_ids);
         }
 
         if (!empty($status) and in_array($status, ['active', 'pending'])) {
@@ -163,15 +149,6 @@ class CommentsController extends Controller
                     '[u.name]' => $commentedUser->full_name
                 ];
                 sendNotification('new_comment', $notifyOptions, $webinar->teacher_id);
-            } elseif ($comment->status == 'active' and !empty($comment->product_id)) {
-                $product = $comment->product;
-                $commentedUser = $comment->user;
-
-                $notifyOptions = [
-                    '[p.title]' => $product->title,
-                    '[u.name]' => $commentedUser->full_name
-                ];
-                sendNotification('product_new_comment', $notifyOptions, $product->creator_id);
             }
         }
 

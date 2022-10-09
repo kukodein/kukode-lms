@@ -16,9 +16,6 @@ class CategoryController extends Controller
         $this->authorize('admin_categories_list');
 
         $categories = Category::where('parent_id', null)
-            ->with([
-                'subCategories'
-            ])
             ->orderBy('id', 'desc')
             ->paginate(10);
 
@@ -181,7 +178,6 @@ class CategoryController extends Controller
                     if (!empty($check)) {
                         $check->update([
                             'order' => $order,
-                            'icon' => $subCategory['icon'] ?? null,
                         ]);
 
                         CategoryTranslation::updateOrCreate([
@@ -193,7 +189,6 @@ class CategoryController extends Controller
                     } else {
                         $new = Category::create([
                             'parent_id' => $category->id,
-                            'icon' => $subCategory['icon'] ?? null,
                             'order' => $order,
                         ]);
 

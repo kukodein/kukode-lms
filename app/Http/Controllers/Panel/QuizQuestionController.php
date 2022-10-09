@@ -19,11 +19,9 @@ class QuizQuestionController extends Controller
 
         $rules = [
             'quiz_id' => 'required|exists:quizzes,id',
-            'title' => 'required',
+            'title' => 'required|max:255',
             'grade' => 'required|integer',
             'type' => 'required',
-            'image' => 'nullable|max:255',
-            'video' => 'nullable|max:255',
         ];
 
         $validate = Validator::make($data, $rules);
@@ -34,18 +32,6 @@ class QuizQuestionController extends Controller
                 'errors' => $validate->errors()
             ], 422);
         }
-
-
-        if (!empty($data['image']) and !empty($data['video'])) {
-            return response()->json([
-                'code' => 422,
-                'errors' => [
-                    'image' => [trans('update.quiz_question_image_validation_by_video')],
-                    'video' => [trans('update.quiz_question_image_validation_by_video')],
-                ]
-            ], 422);
-        }
-
 
         $user = auth()->user();
 
@@ -79,8 +65,6 @@ class QuizQuestionController extends Controller
                 'creator_id' => $user->id,
                 'grade' => $data['grade'],
                 'type' => $data['type'],
-                'image' => $data['image'] ?? null,
-                'video' => $data['video'] ?? null,
                 'created_at' => time()
             ]);
 
@@ -103,7 +87,7 @@ class QuizQuestionController extends Controller
                         $questionAnswer = QuizzesQuestionsAnswer::create([
                             'question_id' => $quizQuestion->id,
                             'creator_id' => $user->id,
-                            'image' => $answer['file'] ?? null,
+                            'image' => $answer['file'],
                             'correct' => isset($answer['correct']) ? true : false,
                             'created_at' => time()
                         ]);
@@ -144,11 +128,13 @@ class QuizQuestionController extends Controller
 
                 $locale = $request->get('locale', app()->getLocale());
 
+                $webinarController = new WebinarController();
+
                 $data = [
                     'pageTitle' => $question->title,
                     'quiz' => $quiz,
                     'question_edit' => $question,
-                    'userLanguages' => getUserLanguagesLists(),
+                    'userLanguages' => $webinarController->getUserLanguagesLists(),
                     'locale' => mb_strtolower($locale),
                     'defaultLocale' => getDefaultLocale(),
                 ];
@@ -217,8 +203,6 @@ class QuizQuestionController extends Controller
             'title' => 'required',
             'grade' => 'required',
             'type' => 'required',
-            'image' => 'nullable|max:255',
-            'video' => 'nullable|max:255',
         ];
 
         $validate = Validator::make($data, $rules);
@@ -227,16 +211,6 @@ class QuizQuestionController extends Controller
             return response()->json([
                 'code' => 422,
                 'errors' => $validate->errors()
-            ], 422);
-        }
-
-        if (!empty($data['image']) and !empty($data['video'])) {
-            return response()->json([
-                'code' => 422,
-                'errors' => [
-                    'image' => [trans('update.quiz_question_image_validation_by_video')],
-                    'video' => [trans('update.quiz_question_image_validation_by_video')],
-                ]
             ], 422);
         }
 
@@ -281,8 +255,6 @@ class QuizQuestionController extends Controller
                     'creator_id' => $user->id,
                     'grade' => $data['grade'],
                     'type' => $data['type'],
-                    'image' => $data['image'] ?? null,
-                    'video' => $data['video'] ?? null,
                     'updated_at' => time()
                 ]);
 

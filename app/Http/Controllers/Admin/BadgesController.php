@@ -59,7 +59,7 @@ class BadgesController extends Controller
             'description' => $data['description'],
         ]);
 
-        return redirect(url()->previous() . '?tab=' . $data['type']);
+        return redirect(url()->previous() . '#' . $data['type']);
     }
 
     public function edit(Request $request, $id)
@@ -113,7 +113,7 @@ class BadgesController extends Controller
 
         removeContentLocale();
 
-        return redirect('/admin/users/badges');
+        return back();
     }
 
     public function delete($id)

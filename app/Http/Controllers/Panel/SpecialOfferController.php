@@ -67,26 +67,18 @@ class SpecialOfferController extends Controller
         $activeSpecialOfferForWebinar = Webinar::findOrFail($data["webinar_id"])->activeSpecialOffer();
 
         if ($activeSpecialOfferForWebinar) {
-            $toastData = [
-                'title' => trans('public.request_failed'),
-                'msg' => trans('update.this_course_has_active_special_offer'),
-                'status' => 'error'
-            ];
-            return back()->with(['toast' => $toastData]);
+            return back()->with('msg', 'This Course Has Active Special Offer');
         }
 
-        $fromDate = convertTimeToUTCzone($data['from_date'], getTimezone());
-        $toDate = convertTimeToUTCzone($data['to_date'], getTimezone());
-
         SpecialOffer::create([
-            'creator_id' => auth()->id(),
+            'creator_id' => auth()->user()->id,
             'name' => $data["name"],
             'webinar_id' => $data["webinar_id"],
             'percent' => $data["percent"],
             'status' => SpecialOffer::$active,
             'created_at' => time(),
-            'from_date' => $fromDate->getTimestamp(),
-            'to_date' => $toDate->getTimestamp(),
+            'from_date' => strtotime($data["from_date"]),
+            'to_date' => strtotime($data["to_date"]),
         ]);
 
         return response()->json([

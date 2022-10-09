@@ -8,7 +8,6 @@ use App\Models\Sale;
 use App\Models\Session;
 use App\Models\Translation\SessionTranslation;
 use App\Models\Webinar;
-use App\Models\WebinarChapterItem;
 use Illuminate\Http\Request;
 use App\Sessions\Zoom;
 use Validator;
@@ -49,14 +48,6 @@ class SessionController extends Controller
             ], 422);
         }
 
-        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
-            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
-            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
-        } else {
-            $data['check_previous_parts'] = false;
-            $data['access_after_day'] = null;
-        }
-
         $webinar = Webinar::find($data['webinar_id']);
 
         if (!empty($webinar) and $webinar->canAccess($user)) {
@@ -83,9 +74,6 @@ class SessionController extends Controller
                 'session_api' => $data['session_api'],
                 'api_secret' => $data['api_secret'] ?? null,
                 'moderator_secret' => $data['moderator_secret'] ?? null,
-                'check_previous_parts' => $data['check_previous_parts'],
-                'access_after_day' => $data['access_after_day'],
-                'extra_time_to_join' => $data['extra_time_to_join'] ?? null,
                 'status' => (!empty($data['status']) and $data['status'] == 'on') ? Session::$Active : Session::$Inactive,
                 'created_at' => time()
             ]);
@@ -98,8 +86,6 @@ class SessionController extends Controller
                     'title' => $data['title'],
                     'description' => $data['description'],
                 ]);
-
-                WebinarChapterItem::makeItem($user->id, $session->chapter_id, $session->id, WebinarChapterItem::$chapterSession);
             }
 
             if ($data['session_api'] == 'big_blue_button') {
@@ -151,14 +137,6 @@ class SessionController extends Controller
             ], 422);
         }
 
-        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
-            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
-            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
-        } else {
-            $data['check_previous_parts'] = false;
-            $data['access_after_day'] = null;
-        }
-
         $webinar = Webinar::find($data['webinar_id']);
 
         if (!empty($webinar) and $webinar->canAccess($user)) {
@@ -199,9 +177,6 @@ class SessionController extends Controller
                     'api_secret' => $data['api_secret'] ?? $session->api_secret,
                     'status' => (!empty($data['status']) and $data['status'] == 'on') ? Session::$Active : Session::$Inactive,
                     'agora_settings' => $agoraSettings,
-                    'check_previous_parts' => $data['check_previous_parts'],
-                    'access_after_day' => $data['access_after_day'],
-                    'extra_time_to_join' => $data['extra_time_to_join'] ?? null,
                     'updated_at' => time()
                 ]);
 
@@ -231,11 +206,6 @@ class SessionController extends Controller
             ->first();
 
         if (!empty($session)) {
-            WebinarChapterItem::where('user_id', $session->creator_id)
-                ->where('item_id', $session->id)
-                ->where('type', WebinarChapterItem::$chapterSession)
-                ->delete();
-
             $session->delete();
         }
 

@@ -25,11 +25,6 @@ class OrderItem extends Model
         return $this->belongsTo('App\Models\Webinar', 'webinar_id', 'id');
     }
 
-    public function bundle()
-    {
-        return $this->belongsTo('App\Models\Bundle', 'bundle_id', 'id');
-    }
-
     public function subscribe()
     {
         return $this->belongsTo('App\Models\Subscribe', 'subscribe_id', 'id');
@@ -50,16 +45,6 @@ class OrderItem extends Model
         return $this->belongsTo('App\Models\RegistrationPackage', 'registration_package_id', 'id');
     }
 
-    public function product()
-    {
-        return $this->belongsTo('App\Models\Product', 'product_id', 'id');
-    }
-
-    public function productOrder()
-    {
-        return $this->belongsTo('App\Models\ProductOrder', 'product_order_id', 'id');
-    }
-
     public function ticket()
     {
         return $this->belongsTo('App\Models\Ticket', 'ticket_id', 'id');
@@ -73,10 +58,6 @@ class OrderItem extends Model
             $seller = $orderItem->webinar->creator_id;
         } elseif (!empty($orderItem->reserve_meeting_id)) {
             $seller = $orderItem->reserveMeeting->meeting->creator_id;
-        } elseif (!empty($orderItem->product_id)) {
-            $seller = $orderItem->product->creator_id;
-        } elseif (!empty($orderItem->bundle_id)) {
-            $seller = $orderItem->bundle->creator_id;
         }
 
         return $seller;

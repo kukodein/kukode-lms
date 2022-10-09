@@ -30,9 +30,4 @@ class CommentReport extends Model
     {
         return $this->belongsTo('App\Models\Blog', 'blog_id', 'id');
     }
-
-    public function product()
-    {
-        return $this->belongsTo('App\Models\Product', 'product_id', 'id');
-    }
 }

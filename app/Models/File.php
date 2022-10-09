@@ -5,12 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
 use Astrotomic\Translatable\Translatable;
-use App\Models\Traits\SequenceContent;
 
 class File extends Model implements TranslatableContract
 {
     use Translatable;
-    use SequenceContent;
 
     public $timestamps = false;
     protected $table = 'files';

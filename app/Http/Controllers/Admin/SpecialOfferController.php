@@ -98,9 +98,11 @@ class SpecialOfferController extends Controller
     public function create()
     {
         $this->authorize('admin_product_discount_create');
+        $webinars = Webinar::whereNull('deleted_at')->get();
 
         $data = [
             'pageTitle' => trans('admin/main.new_product_discount_title'),
+            'webinars' => $webinars,
         ];
 
         return view('admin.financial.special_offers.new', $data);
@@ -125,14 +127,11 @@ class SpecialOfferController extends Controller
         if ($activeSpecialOfferForWebinar) {
             $toastData = [
                 'title' => trans('public.request_failed'),
-                'msg' => trans('update.this_course_has_active_special_offer'),
+                'msg' => 'This class has an active discount.',
                 'status' => 'error'
             ];
             return back()->with(['toast' => $toastData]);
         }
-
-        $fromDate = convertTimeToUTCzone($data['from_date'], getTimezone());
-        $toDate = convertTimeToUTCzone($data['to_date'], getTimezone());
 
         SpecialOffer::create([
             'creator_id' => auth()->user()->id,
@@ -141,8 +140,8 @@ class SpecialOfferController extends Controller
             'percent' => $data["percent"],
             'status' => $data["status"],
             'created_at' => time(),
-            'from_date' => $fromDate->getTimestamp(),
-            'to_date' => $toDate->getTimestamp(),
+            'from_date' => strtotime($data["from_date"]),
+            'to_date' => strtotime($data["to_date"]),
         ]);
 
         return redirect('/admin/financial/special_offers');
@@ -153,10 +152,12 @@ class SpecialOfferController extends Controller
         $this->authorize('admin_product_discount_edit');
 
         $specialOffer = SpecialOffer::findOrFail($id);
+        $webinars = Webinar::whereNull('deleted_at')->get();
 
         $data = [
             'pageTitle' => trans('admin/main.edit_product_discount_title'),
             'specialOffer' => $specialOffer,
+            'webinars' => $webinars,
         ];
 
         return view('admin.financial.special_offers.new', $data);
@@ -177,9 +178,6 @@ class SpecialOfferController extends Controller
         $specialOffer = SpecialOffer::findOrfail($id);
         $data = $request->all();
 
-        $fromDate = convertTimeToUTCzone($data['from_date'], getTimezone());
-        $toDate = convertTimeToUTCzone($data['to_date'], getTimezone());
-
         $specialOffer->update([
             'creator_id' => auth()->user()->id,
             'name' => $data["name"],
@@ -187,8 +185,8 @@ class SpecialOfferController extends Controller
             'percent' => $data["percent"],
             'status' => $data["status"],
             'created_at' => time(),
-            'from_date' => $fromDate->getTimestamp(),
-            'to_date' => $toDate->getTimestamp(),
+            'from_date' => strtotime($data["from_date"]),
+            'to_date' => strtotime($data["to_date"]),
         ]);
 
         return redirect('/admin/financial/special_offers');

@@ -49,26 +49,23 @@ class Subscribe extends Model implements TranslatableContract
         if ($lastSubscribeSale) {
             $subscribe = $lastSubscribeSale->subscribe;
 
-            if (!empty($subscribe)) {
-                $useCount = SubscribeUse::where('user_id', $userId)
-                    ->where('subscribe_id', $subscribe->id)
-                    ->whereHas('sale', function ($query) use ($lastSubscribeSale) {
-                        $query->where('created_at', '>', $lastSubscribeSale->created_at);
-                        $query->whereNull('refund_at');
-                    })
-                    ->count();
+            $useCount = SubscribeUse::where('user_id', $userId)
+                ->where('subscribe_id', $subscribe->id)
+                ->whereHas('sale', function ($query) use ($lastSubscribeSale) {
+                    $query->where('created_at', '>', $lastSubscribeSale->created_at);
+                    $query->whereNull('refund_at');
+                })
+                ->count();
 
-                $subscribe->used_count = $useCount;
+            $subscribe->used_count = $useCount;
 
-                $countDayOfSale = (int)diffTimestampDay(time(), $lastSubscribeSale->created_at);
-
-                if (
-                    ($subscribe->usable_count > $useCount or $subscribe->infinite_use)
-                    and
-                    $subscribe->days >= $countDayOfSale
-                ) {
-                    $activePlan = $subscribe;
-                }
+            $countDayOfSale = (int)diffTimestampDay(time(), $lastSubscribeSale->created_at);
+            if (
+                $subscribe->usable_count > $useCount
+                and
+                $subscribe->days >= $countDayOfSale
+            ) {
+                $activePlan = $subscribe;
             }
         }
 

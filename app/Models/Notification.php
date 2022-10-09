@@ -14,7 +14,7 @@ class Notification extends Model
     static $AdminSender = 'admin';
     static $SystemSender = 'system';
 
-    static $notificationsType = ['single', 'all_users', 'students', 'instructors', 'organizations', 'group', 'course_students'];
+    static $notificationsType = ['single', 'all_users', 'students', 'instructors', 'organizations', 'group'];
 
     public function user()
     {

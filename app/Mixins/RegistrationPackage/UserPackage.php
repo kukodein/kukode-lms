@@ -3,7 +3,6 @@
 namespace App\Mixins\RegistrationPackage;
 
 use App\Models\GroupRegistrationPackage;
-use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Webinar;
 
@@ -15,7 +14,6 @@ class UserPackage
     public $courses_capacity;
     public $courses_count;
     public $meeting_count;
-    public $product_count;
     public $title;
     public $activation_date;
     public $days_remained;
@@ -45,7 +43,6 @@ class UserPackage
             $package->courses_capacity = (!empty($data) and !empty($data->courses_capacity)) ? $data->courses_capacity : null;
             $package->courses_count = (!empty($data) and !empty($data->courses_count)) ? $data->courses_count : null;
             $package->meeting_count = (!empty($data) and !empty($data->meeting_count)) ? $data->meeting_count : null;
-            $package->product_count = (!empty($data) and !empty($data->product_count)) ? $data->product_count : null;
 
             if ($type == 'package') {
                 $package->package_id = $data->id;
@@ -155,7 +152,7 @@ class UserPackage
     }
 
     /**
-     * @param $type => instructors_count, students_count, courses_capacity, courses_count, meeting_count, product_count
+     * @param $type => instructors_count, students_count, courses_capacity, courses_count, meeting_count
      * */
     public function checkPackageLimit($type, $count = null)
     {
@@ -189,13 +186,9 @@ class UserPackage
                         $usedCount = $userMeeting->meetingTimes()->count();
                     }
                     break;
-
-                case 'product_count':
-                    $usedCount = Product::where('creator_id', $user->id)->count();
-                    break;
             }
 
-            if ($usedCount >= $package->{$type}) {
+            if ($usedCount > $package->{$type}) {
                 $resultData = [
                     'type' => $type,
                     'currentCount' => $package->{$type}

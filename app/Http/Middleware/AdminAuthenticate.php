@@ -49,7 +49,6 @@ class AdminAuthenticate
 
             $sidebarBeeps = [];
             $sidebarBeeps['courses'] = $sidebarController->getCoursesBeep();
-            $sidebarBeeps['bundles'] = $sidebarController->getBundlesBeep();
             $sidebarBeeps['webinars'] = $sidebarController->getWebinarsBeep();
             $sidebarBeeps['textLessons'] = $sidebarController->getTextLessonsBeep();
             $sidebarBeeps['reviews'] = $sidebarController->getReviewsBeep();

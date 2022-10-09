@@ -6,7 +6,6 @@ use App\Bitwise\UserLevelOfTraining;
 use App\Http\Controllers\Controller;
 use App\Mixins\RegistrationPackage\UserPackage;
 use App\Models\Category;
-use App\Models\DeleteAccountRequest;
 use App\Models\Meeting;
 use App\Models\Newsletter;
 use App\Models\Region;
@@ -203,22 +202,19 @@ class UserController extends Controller
                     'address' => $data['address'] ?? '',
                 ];
             } elseif ($step == 8) {
-                if (!$user->isUser()) {
-                    if (!empty($data['zoom_jwt_token'])) {
-                        UserZoomApi::updateOrCreate(
-                            [
-                                'user_id' => $user->id,
-                            ],
-                            [
-                                'jwt_token' => $data['zoom_jwt_token'],
-                                'created_at' => time()
-                            ]
-                        );
-                    } else {
-                        UserZoomApi::where('user_id', $user->id)->delete();
-                    }
+                if (!$user->isUser() and !empty($data['zoom_jwt_token'])) {
+                    UserZoomApi::updateOrCreate(
+                        [
+                            'user_id' => $user->id,
+                        ],
+                        [
+                            'jwt_token' => $data['zoom_jwt_token'],
+                            'created_at' => time()
+                        ]
+                    );
                 }
             } elseif ($step == 9) {
+
                 $updateData = [
                     "level_of_training" => !empty($data['level_of_training']) ? (new UserLevelOfTraining())->getValue($data['level_of_training']) : null,
                     "meeting_type" => $data['meeting_type'] ?? null,
@@ -606,7 +602,6 @@ class UserController extends Controller
 
                 $data = [
                     'organization_id' => $organization->id,
-                    'edit_new_user' => true,
                     'user' => $user,
                     'user_type' => $user_type,
                     'categories' => $categories,
@@ -665,10 +660,6 @@ class UserController extends Controller
 
             if (!empty($option) and $option == 'just_teachers') {
                 $query->where('role_name', 'teacher');
-            }
-
-            if ($option == "just_student_role") {
-                $query->where('role_name', Role::$user);
             }
 
             $users = $query->get();
@@ -755,27 +746,5 @@ class UserController extends Controller
         return response()->json([
             'code' => 200
         ], 200);
-    }
-
-    public function deleteAccount(Request $request)
-    {
-        $user = auth()->user();
-
-        if (!empty($user)) {
-            DeleteAccountRequest::updateOrCreate([
-                'user_id' => $user->id,
-            ], [
-                'created_at' => time()
-            ]);
-
-            return response()->json([
-                'code' => 200,
-                'title' => trans('public.request_success'),
-                'text' => trans('update.delete_account_request_stored_msg'),
-                'dont_reload' => true
-            ]);
-        }
-
-        abort(403);
     }
 }
