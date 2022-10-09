@@ -27,9 +27,9 @@
     <style>
         {!! !empty(getCustomCssAndJs('css')) ? getCustomCssAndJs('css') : '' !!}
 
-        {!! getThemeFontsSettings(null) !!}
+        {!! getThemeFontsSettings() !!}
 
-        {!! getThemeColorsSettings(null) !!}
+        {!! getThemeColorsSettings() !!}
     </style>
 
 
