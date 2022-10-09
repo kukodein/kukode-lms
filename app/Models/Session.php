@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\SequenceContent;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\CalendarLinks\Link;
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
@@ -10,6 +11,7 @@ use Astrotomic\Translatable\Translatable;
 class Session extends Model implements TranslatableContract
 {
     use Translatable;
+    use SequenceContent;
 
     public $timestamps = false;
     protected $guarded = ['id'];

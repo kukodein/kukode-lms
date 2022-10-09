@@ -59,18 +59,12 @@ class Channel implements IChannel
     public function verify(Request $request)
     {
         dd(2);
-
+        $order = null;
 
         if (!empty($order)) {
             $order->update(['status' => Order::$fail]);
         }
 
-        $toastData = [
-            'title' => trans('cart.fail_purchase'),
-            'msg' => trans('cart.gateway_error'),
-            'status' => 'error'
-        ];
-
-        return back()->with(['toast' => $toastData])->withInput();
+        return $order;
     }
 }

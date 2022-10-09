@@ -10,8 +10,10 @@ use App\Models\QuizzesResult;
 use App\Models\Translation\QuizTranslation;
 use App\Models\Webinar;
 use App\Models\WebinarChapter;
+use App\Models\WebinarChapterItem;
 use App\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Http\Request;
 
@@ -170,21 +172,46 @@ class QuizController extends Controller
     {
         $this->authorize('admin_quizzes_create');
 
-        $this->validate($request, [
-            'title' => 'required|max:255',
-            'webinar_id' => 'required',
-            'pass_mark' => 'required',
-        ]);
-
         $data = $request->all();
+        $locale = $request->get('locale', getDefaultLocale());
+
+        $rules = [
+            'title' => 'required|max:255',
+            'webinar_id' => 'required|exists:webinars,id',
+            'pass_mark' => 'required',
+        ];
+
+        if ($request->ajax()) {
+            $data = $request->get('ajax');
+
+            $validate = Validator::make($data, $rules);
+
+            if ($validate->fails()) {
+                return response()->json([
+                    'code' => 422,
+                    'errors' => $validate->errors()
+                ], 422);
+            }
+        } else {
+            $this->validate($request, $rules);
+        }
+
 
         $webinar = Webinar::where('id', $data['webinar_id'])
             ->first();
 
         if (!empty($webinar)) {
+            $chapter = null;
+
+            if (!empty($data['chapter_id'])) {
+                $chapter = WebinarChapter::where('id', $data['chapter_id'])
+                    ->where('webinar_id', $webinar->id)
+                    ->first();
+            }
+
             $quiz = Quiz::create([
                 'webinar_id' => $webinar->id,
-                'chapter_id' => null,
+                'chapter_id' => !empty($chapter) ? $chapter->id : null,
                 'creator_id' => $webinar->creator_id,
                 'webinar_title' => $webinar->title,
                 'attempt' => $data['attempt'] ?? null,
@@ -195,16 +222,32 @@ class QuizController extends Controller
                 'created_at' => time(),
             ]);
 
-            if (!empty($quiz)) {
-                QuizTranslation::updateOrCreate([
-                    'quiz_id' => $quiz->id,
-                    'locale' => mb_strtolower($data['locale']),
-                ], [
-                    'title' => $data['title'],
-                ]);
+            QuizTranslation::updateOrCreate([
+                'quiz_id' => $quiz->id,
+                'locale' => mb_strtolower($locale),
+            ], [
+                'title' => $data['title'],
+            ]);
+
+            if (!empty($quiz->chapter_id)) {
+                WebinarChapterItem::makeItem($webinar->creator_id, $quiz->chapter_id, $quiz->id, WebinarChapterItem::$chapterQuiz);
             }
 
-            return redirect(route('adminEditQuiz', ['id' => $quiz->id]));
+            if ($request->ajax()) {
+
+                $redirectUrl = '';
+
+                if (empty($data['is_webinar_page'])) {
+                    $redirectUrl = '/admin/quizzes/' . $quiz->id . '/edit';
+                }
+
+                return response()->json([
+                    'code' => 200,
+                    'redirect_url' => $redirectUrl
+                ]);
+            } else {
+                return redirect()->route('adminEditQuiz', ['id' => $quiz->id]);
+            }
         } else {
             return back()->withErrors([
                 'webinar_id' => trans('validation.exists', ['attribute' => trans('admin/main.course')])
@@ -235,12 +278,19 @@ class QuizController extends Controller
         $quiz->title = $quiz->getTitleAttribute();
         $quiz->locale = mb_strtoupper($locale);
 
+        $chapters = collect();
+
+        if (!empty($quiz->webinar)) {
+            $chapters = $quiz->webinar->chapters;
+        }
+
         $data = [
             'pageTitle' => trans('public.edit') . ' ' . $quiz->title,
             'webinars' => $webinars,
             'quiz' => $quiz,
             'quizQuestions' => $quiz->quizQuestions,
             'creator' => $creator,
+            'chapters' => $chapters,
             'locale' => mb_strtolower($locale),
             'defaultLocale' => getDefaultLocale(),
         ];
@@ -250,17 +300,35 @@ class QuizController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->validate($request, [
+        $rules = [
             'title' => 'required|max:255',
-            'webinar_id' => 'nullable',
+            'webinar_id' => 'required|exists:webinars,id',
             'pass_mark' => 'required',
-        ]);
+        ];
+
         $data = $request->all();
+        $locale = $request->get('locale', getDefaultLocale());
+
+        if ($request->ajax()) {
+            $data = $request->get('ajax');
+
+            $validate = Validator::make($data, $rules);
+
+            if ($validate->fails()) {
+                return response()->json([
+                    'code' => 422,
+                    'errors' => $validate->errors()
+                ], 422);
+            }
+        } else {
+            $this->validate($request, $rules);
+        }
 
         $quiz = Quiz::find($id);
         $user = $quiz->creator;
 
         $webinar = null;
+        $chapter = null;
         if (!empty($data['webinar_id'])) {
             $webinar = Webinar::where('id', $data['webinar_id'])
                 ->where(function ($query) use ($user) {
@@ -268,11 +336,17 @@ class QuizController extends Controller
                         ->orWhere('creator_id', $user->id);
                 })->where('status', 'active')
                 ->first();
-        }
 
+            if (!empty($webinar) and !empty($data['chapter_id'])) {
+                $chapter = WebinarChapter::where('id', $data['chapter_id'])
+                    ->where('webinar_id', $webinar->id)
+                    ->first();
+            }
+        }
 
         $quiz->update([
             'webinar_id' => !empty($webinar) ? $webinar->id : null,
+            'chapter_id' => !empty($chapter) ? $chapter->id : null,
             'webinar_title' => !empty($webinar) ? $webinar->title : null,
             'attempt' => $data['attempt'] ?? null,
             'pass_mark' => $data['pass_mark'],
@@ -285,24 +359,61 @@ class QuizController extends Controller
         if (!empty($quiz)) {
             QuizTranslation::updateOrCreate([
                 'quiz_id' => $quiz->id,
-                'locale' => mb_strtolower($data['locale']),
+                'locale' => mb_strtolower($locale),
             ], [
                 'title' => $data['title'],
             ]);
+
+            $checkChapterItem = WebinarChapterItem::where('user_id', $user->id)
+                ->where('item_id', $quiz->id)
+                ->where('type', WebinarChapterItem::$chapterQuiz)
+                ->first();
+
+            if (!empty($quiz->chapter_id)) {
+                if (empty($checkChapterItem)) {
+                    WebinarChapterItem::makeItem($user->id, $quiz->chapter_id, $quiz->id, WebinarChapterItem::$chapterQuiz);
+                } elseif ($checkChapterItem->chapter_id != $quiz->chapter_id) {
+                    $checkChapterItem->delete(); // remove quiz from old chapter and assign it to new chapter
+
+                    WebinarChapterItem::makeItem($user->id, $quiz->chapter_id, $quiz->id, WebinarChapterItem::$chapterQuiz);
+                }
+            } else if (!empty($checkChapterItem)) {
+                $checkChapterItem->delete();
+            }
         }
 
         removeContentLocale();
 
-        return redirect()->back();
+        if ($request->ajax()) {
+            return response()->json([
+                'code' => 200
+            ]);
+        } else {
+            return redirect()->back();
+        }
     }
 
-    public function delete($id)
+    public function delete(Request $request, $id)
     {
         $this->authorize('admin_quizzes_delete');
 
         $quiz = Quiz::findOrFail($id);
 
         $quiz->delete();
+
+        $checkChapterItem = WebinarChapterItem::where('item_id', $id)
+            ->where('type', WebinarChapterItem::$chapterQuiz)
+            ->first();
+
+        if (!empty($checkChapterItem)) {
+            $checkChapterItem->delete();
+        }
+
+        if ($request->ajax()) {
+            return response()->json([
+                'code' => 200
+            ], 200);
+        }
 
         return redirect()->back();
     }

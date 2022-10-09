@@ -10,7 +10,7 @@
                 <label class="input-label">{{ trans('auth.language') }}</label>
                 <select name="locale" class="custom-select {{ !empty($webinar) ? 'js-edit-content-locale' : '' }}">
                     @foreach($userLanguages as $lang => $language)
-                        <option value="{{ $lang }}" @if(request()->get('locale', app()->getLocale()) == $lang) selected @endif>{{ $language }} {{ (!empty($definedLanguage) and is_array($definedLanguage) and in_array(mb_strtolower($lang), $definedLanguage)) ? '('. trans('public.content_defined') .')' : '' }}</option>
+                        <option value="{{ $lang }}" @if(mb_strtolower(request()->get('locale', app()->getLocale())) == mb_strtolower($lang)) selected @endif>{{ $language }} {{ (!empty($definedLanguage) and is_array($definedLanguage) and in_array(mb_strtolower($lang), $definedLanguage)) ? '('. trans('public.content_defined') .')' : '' }}</option>
                     @endforeach
                 </select>
             </div>
@@ -25,7 +25,7 @@
             <select name="type" class="custom-select @error('type')  is-invalid @enderror">
                 <option value="webinar" @if(!empty($webinar) and $webinar->isWebinar()) selected @endif>{{ trans('webinars.webinar') }}</option>
                 <option value="course" @if(!empty($webinar) and $webinar->type == 'course') selected @endif>{{ trans('webinars.video_course') }}</option>
-                <option value="text_lesson" @if(!empty($webinar) and $webinar->type == 'text_lesson') selected @endif>{{ trans('webinars.text_lesson') }}</option>
+                <option>{{ trans('webinars.text_lesson') }} (Paid Plugin)</option>
             </select>
 
             @error('type')
@@ -41,9 +41,9 @@
                 <label class="input-label d-block">{{ trans('public.select_a_teacher') }}</label>
 
                 <select name="teacher_id" class="custom-select @error('teacher_id')  is-invalid @enderror">
-                    <option {{ !empty($webinar) ? '' : 'selected' }} disabled>{{ trans('public.choose_instructor') }}</option>
+                    <option value="" {{ (!empty($webinar) and !empty($webinar->teacher_id)) ? '' : 'selected' }}>{{ trans('public.choose_instructor') }}</option>
                     @foreach($teachers as $teacher)
-                        <option value="{{ $teacher->id }}" {{ !empty($webinar) && $webinar->teacher_id === $teacher->id? 'selected' : '' }}>{{ $teacher->full_name }}</option>
+                        <option value="{{ $teacher->id }}" {{ (!empty($webinar) && $webinar->teacher_id == $teacher->id) ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
                     @endforeach
                 </select>
 
@@ -110,12 +110,31 @@
             </div>
         </div>
 
-        <div class="form-group mt-15">
+        <div class="form-group mt-25">
             <label class="input-label">{{ trans('public.demo_video') }} ({{ trans('public.optional') }})</label>
-            <div class="input-group">
+
+            <div class="">
+                <label class="input-label font-12">{{ trans('public.source') }}</label>
+                <select name="video_demo_source"
+                        class="js-video-demo-source form-control"
+                >
+                    @foreach(\App\Models\Webinar::$videoDemoSource as $source)
+                        <option value="{{ $source }}" @if(!empty($webinar) and $webinar->video_demo_source == $source) selected @endif>{{ trans('update.file_source_'.$source) }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group mt-0">
+            <label class="input-label font-12">{{ trans('update.path') }}</label>
+            <div class="input-group js-video-demo-path-input">
                 <div class="input-group-prepend">
-                    <button type="button" class="input-group-text panel-file-manager" data-input="demo_video" data-preview="holder">
-                        <i data-feather="arrow-up" width="18" height="18" class="text-white"></i>
+                    <button type="button" class="js-video-demo-path-upload input-group-text text-white panel-file-manager {{ (empty($webinar) or empty($webinar->video_demo_source) or $webinar->video_demo_source == 'upload') ? '' : 'd-none' }}" data-input="demo_video" data-preview="holder">
+                        <i data-feather="upload" width="18" height="18" class="text-white"></i>
+                    </button>
+
+                    <button type="button" class="js-video-demo-path-links rounded-left input-group-text input-group-text-rounded-left text-white {{ (empty($webinar) or empty($webinar->video_demo_source) or $webinar->video_demo_source == 'upload') ? 'd-none' : '' }}">
+                        <i data-feather="link" width="18" height="18" class="text-white"></i>
                     </button>
                 </div>
                 <input type="text" name="video_demo" id="demo_video" value="{{ !empty($webinar) ? $webinar->video_demo : old('video_demo') }}" class="form-control @error('video_demo')  is-invalid @enderror"/>
@@ -132,7 +151,7 @@
 
 <div class="row">
     <div class="col-12">
-        <div class="form-group mt-15">
+        <div class="form-group">
             <label class="input-label">{{ trans('public.description') }}</label>
             <textarea id="summernote" name="description" class="form-control @error('description')  is-invalid @enderror" placeholder="{{ trans('forms.webinar_description_placeholder') }}">{!! (!empty($webinar) and !empty($webinar->translate($locale))) ? $webinar->translate($locale)->description : old('description')  !!}</textarea>
             @error('description')
@@ -163,4 +182,15 @@
 
 @push('scripts_bottom')
     <script src="/assets/vendors/summernote/summernote-bs4.min.js"></script>
+
+    @push('scripts_bottom')
+        <script>
+            var videoDemoPathPlaceHolderBySource = {
+                upload: '{{ trans('update.file_source_upload_placeholder') }}',
+                youtube: '{{ trans('update.file_source_youtube_placeholder') }}',
+                vimeo: '{{ trans('update.file_source_vimeo_placeholder') }}',
+                external_link: '{{ trans('update.file_source_external_link_placeholder') }}',
+            }
+        </script>
+    @endpush
 @endpush

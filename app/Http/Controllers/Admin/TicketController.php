@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Bundle;
 use App\Models\Ticket;
 use App\Models\Translation\TicketTranslation;
 use App\Models\Webinar;
@@ -25,16 +26,26 @@ class TicketController extends Controller
 
 
         $data = $request->all();
+        $creator = null;
 
         if (!empty($data['webinar_id'])) {
             $webinar = Webinar::findOrFail($data['webinar_id']);
 
-            $date = $data['date'];
-            $date = explode(' - ', $date);
+            $creator = $webinar->creator;
+        } else if (!empty($data['bundle_id'])) {
+            $bundle = Bundle::findOrFail($data['bundle_id']);
 
+            $creator = $bundle->creator;
+        }
+
+        $date = $data['date'];
+        $date = explode(' - ', $date);
+
+        if (!empty($creator)) {
             $ticket = Ticket::create([
-                'creator_id' => $webinar->creator_id,
-                'webinar_id' => $webinar->id,
+                'creator_id' => $creator->id,
+                'webinar_id' => !empty($data['webinar_id']) ? $data['webinar_id'] : null,
+                'bundle_id' => !empty($data['bundle_id']) ? $data['bundle_id'] : null,
                 'start_date' => strtotime($date[0]),
                 'end_date' => strtotime($date[1]),
                 'discount' => $data['discount'],

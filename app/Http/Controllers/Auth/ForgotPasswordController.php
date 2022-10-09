@@ -8,8 +8,6 @@ use Illuminate\Foundation\Auth\SendsPasswordResetEmails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
-use Psy\Util\Str;
 
 class ForgotPasswordController extends Controller
 {
@@ -52,7 +50,7 @@ class ForgotPasswordController extends Controller
         ];
 
         Mail::send('web.default.auth.password_verify', $emailData, function ($message) use ($request) {
-            $message->from(!empty($generalSettings['site_email']) ? $generalSettings['site_email'] : env('MAIL_FROM_ADDRESS'));
+            $message->from(!empty($generalSettings['site_email']) ? $generalSettings['site_email'] : env('MAIL_FROM_ADDRESS'), env('MAIL_FROM_NAME'));
             $message->to($request->input('email'));
             $message->subject('Reset Password Notification');
         });

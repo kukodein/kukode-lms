@@ -26,7 +26,7 @@ class Channel implements IChannel
         $payStack = new Paystack();
 
         $payStack->getAuthorizationResponse([
-            "amount" => $order->total_amount,
+            "amount" => $order->total_amount * 1000,
             "reference" => $payStack->genTranxRef(),
             "email" => $order->user->email,
             "callback_url" => $this->makeCallbackUrl($order),

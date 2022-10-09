@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Session;
 use App\Models\Translation\SessionTranslation;
 use App\Models\Webinar;
+use App\Models\WebinarChapterItem;
 use App\Sessions\Zoom;
 use Illuminate\Http\Request;
 use Validator;
@@ -16,7 +17,7 @@ class SessionController extends Controller
     {
         $this->authorize('admin_webinars_edit');
 
-        $data = $request->all();
+        $data = $request->get('ajax')['new'];
 
         $validator = Validator::make($data, [
             'webinar_id' => 'required',
@@ -36,6 +37,14 @@ class SessionController extends Controller
             ], 422);
         }
 
+        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
+            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
+            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
+        } else {
+            $data['check_previous_parts'] = false;
+            $data['access_after_day'] = null;
+        }
+
         if (!empty($data['webinar_id'])) {
             $webinar = Webinar::where('id', $data['webinar_id'])->first();
 
@@ -52,6 +61,7 @@ class SessionController extends Controller
                         'errors' => $error,
                     ], 422);
                 }
+
 
                 $sessionDate = convertTimeToUTCzone($data['date'], $webinar->timezone);
 
@@ -72,10 +82,13 @@ class SessionController extends Controller
                     'chapter_id' => $data['chapter_id'] ?? null,
                     'date' => $sessionDate->getTimestamp(),
                     'duration' => $data['duration'],
+                    'extra_time_to_join' => $data['extra_time_to_join'] ?? null,
                     'link' => $data['link'] ?? '',
                     'session_api' => $data['session_api'],
                     'api_secret' => $data['api_secret'] ?? '',
                     'moderator_secret' => $data['moderator_secret'] ?? '',
+                    'check_previous_parts' => $data['check_previous_parts'],
+                    'access_after_day' => $data['access_after_day'],
                     'status' => (!empty($data['status']) and $data['status'] == 'on') ? Session::$Active : Session::$Inactive,
                     'created_at' => time()
                 ]);
@@ -88,6 +101,10 @@ class SessionController extends Controller
                         'title' => $data['title'],
                         'description' => $data['description'],
                     ]);
+
+                    if (!empty($session->chapter_id)) {
+                        WebinarChapterItem::makeItem($webinar->creator_id, $session->chapter_id, $session->id, WebinarChapterItem::$chapterSession);
+                    }
                 }
 
                 if ($data['session_api'] == 'big_blue_button') {
@@ -113,38 +130,11 @@ class SessionController extends Controller
         return response()->json([], 422);
     }
 
-    public function edit(Request $request, $id)
-    {
-        $this->authorize('admin_webinars_edit');
-
-        $session = Session::where('id', $id)->first();
-
-        if (!empty($session)) {
-            $locale = $request->get('locale', app()->getLocale());
-            if (empty($locale)) {
-                $locale = app()->getLocale();
-            }
-            storeContentLocale($locale, $session->getTable(), $session->id);
-
-            $session->title = $session->getTitleAttribute();
-            $session->description = $session->getDescriptionAttribute();
-            $session->link = $session->getJoinLink();
-            $session->locale = mb_strtoupper($locale);
-            $session->date = !empty($session->date) ? dateTimeFormat($session->date, 'Y-m-d H:i', false, false, $session->webinar->timezone) : null;
-
-            return response()->json([
-                'session' => $session
-            ], 200);
-        }
-
-        return response()->json([], 422);
-    }
-
     public function update(Request $request, $id)
     {
         $this->authorize('admin_webinars_edit');
 
-        $data = $request->all();
+        $data = $request->get('ajax')[$id];
         $session = Session::where('id', $id)
             ->first();
 
@@ -164,6 +154,14 @@ class SessionController extends Controller
                 'code' => 422,
                 'errors' => $validator->errors(),
             ], 422);
+        }
+
+        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
+            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
+            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
+        } else {
+            $data['check_previous_parts'] = false;
+            $data['access_after_day'] = null;
         }
 
         $webinar = Webinar::where('id', $data['webinar_id'])->first();
@@ -202,11 +200,14 @@ class SessionController extends Controller
                     'chapter_id' => $data['chapter_id'] ?? null,
                     'date' => $sessionDate,
                     'duration' => $data['duration'] ?? $session->duration,
+                    'extra_time_to_join' => $data['extra_time_to_join'] ?? null,
                     'link' => $data['link'] ?? $session->link,
                     'session_api' => $session_api,
                     'api_secret' => $data['api_secret'] ?? $session->api_secret,
                     'status' => (!empty($data['status']) and $data['status'] == 'on') ? Session::$Active : Session::$Inactive,
                     'agora_settings' => $agoraSettings,
+                    'check_previous_parts' => $data['check_previous_parts'],
+                    'access_after_day' => $data['access_after_day'],
                     'updated_at' => time()
                 ]);
 
@@ -217,6 +218,15 @@ class SessionController extends Controller
                     'title' => $data['title'],
                     'description' => $data['description'],
                 ]);
+
+                WebinarChapterItem::where('user_id', $session->creator_id)
+                    ->where('item_id', $session->id)
+                    ->where('type', WebinarChapterItem::$chapterSession)
+                    ->delete();
+
+                if (!empty($session->chapter_id)) {
+                    WebinarChapterItem::makeItem($webinar->creator_id, $session->chapter_id, $session->id, WebinarChapterItem::$chapterSession);
+                }
 
                 removeContentLocale();
 
@@ -235,9 +245,20 @@ class SessionController extends Controller
     {
         $this->authorize('admin_webinars_edit');
 
-        Session::find($id)->delete();
+        $session = Session::find($id);
 
-        return redirect()->back();
+        if (!empty($session)) {
+            WebinarChapterItem::where('user_id', $session->creator_id)
+                ->where('item_id', $session->id)
+                ->where('type', WebinarChapterItem::$chapterSession)
+                ->delete();
+
+            $session->delete();
+        }
+
+        return response()->json([
+            'code' => 200,
+        ], 200);
     }
 
     private function handleZoomApi($session, $user)

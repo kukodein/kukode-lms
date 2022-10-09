@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Bundle;
 use App\Models\Faq;
 use App\Models\Translation\FaqTranslation;
 use App\Models\Webinar;
@@ -16,18 +17,29 @@ class FAQController extends Controller
 
         $this->validate($request, [
             'title' => 'required|max:255',
-            'webinar_id' => 'required',
             'answer' => 'required',
         ]);
 
         $data = $request->all();
 
+        $creator = null;
+
         if (!empty($data['webinar_id'])) {
             $webinar = Webinar::findOrFail($data['webinar_id']);
 
+            $creator = $webinar->creator;
+        } else if (!empty($data['bundle_id'])) {
+            $bundle = Bundle::findOrFail($data['bundle_id']);
+
+            $creator = $bundle->creator;
+        }
+
+        if (!empty($creator)) {
+
             $faq = Faq::create([
-                'creator_id' => $webinar->creator_id,
-                'webinar_id' => $webinar->id,
+                'creator_id' => $creator->id,
+                'webinar_id' => !empty($data['webinar_id']) ? $data['webinar_id'] : null,
+                'bundle_id' => !empty($data['bundle_id']) ? $data['bundle_id'] : null,
                 'created_at' => time()
             ]);
 
@@ -96,7 +108,6 @@ class FAQController extends Controller
 
         $this->validate($request, [
             'title' => 'required|max:64',
-            'webinar_id' => 'required',
             'answer' => 'required',
         ]);
 

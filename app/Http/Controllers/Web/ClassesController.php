@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Bundle;
 use App\Models\Category;
 use App\Models\FeatureWebinar;
+use App\Models\SpecialOffer;
 use App\Models\Ticket;
 use App\Models\Webinar;
 use App\Models\WebinarFilterOption;
@@ -14,23 +16,35 @@ use Illuminate\Support\Facades\DB;
 
 class ClassesController extends Controller
 {
+    public $tableName = 'webinars';
+    public $columnId = 'webinar_id';
+
+
     public function index(Request $request)
     {
         $webinarsQuery = Webinar::where('webinars.status', 'active')
             ->where('private', false);
+
+        $type = $request->get('type');
+        if (!empty($type) and is_array($type) and in_array('bundle', $type)) {
+            $webinarsQuery = Bundle::where('bundles.status', 'active');
+            $this->tableName = 'bundles';
+            $this->columnId = 'bundle_id';
+        }
 
         $webinarsQuery = $this->handleFilters($request, $webinarsQuery);
 
 
         $sort = $request->get('sort', null);
 
-        if (empty($sort)) {
-            $webinarsQuery = $webinarsQuery->orderBy('webinars.created_at', 'desc')
-                ->orderBy('webinars.updated_at', 'desc');
+        if (empty($sort) or $sort == 'newest') {
+            $webinarsQuery = $webinarsQuery->orderBy("{$this->tableName}.created_at", 'desc')
+                ->orderBy("{$this->tableName}.updated_at", 'desc');
         }
 
-        $webinars = $webinarsQuery->with(['tickets', 'feature'])
-            ->paginate(6);
+        $webinars = $webinarsQuery->with([
+            'tickets'
+        ])->paginate(6);
 
         $seoSettings = getSeoMetas('classes');
         $pageTitle = $seoSettings['title'] ?? '';
@@ -70,9 +84,46 @@ class ClassesController extends Controller
                 });
         });
 
-        if (!empty($upcoming) and $upcoming == 'on') {
-            $query->whereNotNull('start_date')
-                ->where('start_date', '>=', time());
+        if ($this->tableName == 'webinars') {
+
+            if (!empty($upcoming) and $upcoming == 'on') {
+                $query->whereNotNull('start_date')
+                    ->where('start_date', '>=', time());
+            }
+
+            if (!empty($isDownloadable) and $isDownloadable == 'on') {
+                $query->where('downloadable', 1);
+            }
+
+            if (!empty($typeOptions) and is_array($typeOptions)) {
+                $query->whereIn("{$this->tableName}.type", $typeOptions);
+            }
+
+            if (!empty($moreOptions) and is_array($moreOptions)) {
+                if (in_array('subscribe', $moreOptions)) {
+                    $query->where('subscribe', 1);
+                }
+
+                if (in_array('certificate_included', $moreOptions)) {
+                    $query->whereHas('quizzes', function ($query) {
+                        $query->where('certificate', 1)
+                            ->where('status', 'active');
+                    });
+                }
+
+                if (in_array('with_quiz', $moreOptions)) {
+                    $query->whereHas('quizzes', function ($query) {
+                        $query->where('status', 'active');
+                    });
+                }
+
+                if (in_array('featured', $moreOptions)) {
+                    $query->whereHas('feature', function ($query) {
+                        $query->whereIn('page', ['home_categories', 'categories'])
+                            ->where('status', 'publish');
+                    });
+                }
+            }
         }
 
         if (!empty($isFree) and $isFree == 'on') {
@@ -80,10 +131,6 @@ class ClassesController extends Controller
                 $qu->whereNull('price')
                     ->orWhere('price', '0');
             });
-        }
-
-        if (!empty($isDownloadable) and $isDownloadable == 'on') {
-            $query->where('downloadable', 1);
         }
 
         if (!empty($withDiscount) and $withDiscount == 'on') {
@@ -96,13 +143,21 @@ class ClassesController extends Controller
 
             foreach ($tickets as $ticket) {
                 if ($ticket->isValid()) {
-                    $webinarIdsHasDiscount[] = $ticket->webinar_id;
+                    $webinarIdsHasDiscount[] = $ticket->{$this->columnId};
                 }
             }
 
+            $specialOffersWebinarIds = SpecialOffer::where('status', 'active')
+                ->where('from_date', '<', $now)
+                ->where('to_date', '>', $now)
+                ->pluck('webinar_id')
+                ->toArray();
+
+            $webinarIdsHasDiscount = array_merge($specialOffersWebinarIds, $webinarIdsHasDiscount);
+
             $webinarIdsHasDiscount = array_unique($webinarIdsHasDiscount);
 
-            $query->whereIn('webinars.id', $webinarIdsHasDiscount);
+            $query->whereIn("{$this->tableName}.id", $webinarIdsHasDiscount);
         }
 
         if (!empty($sort)) {
@@ -116,63 +171,33 @@ class ClassesController extends Controller
 
             if ($sort == 'bestsellers') {
                 $query->leftJoin('sales', function ($join) {
-                    $join->on('webinars.id', '=', 'sales.webinar_id')
+                    $join->on("{$this->tableName}.id", '=', "sales.{$this->columnId}")
                         ->whereNull('refund_at');
                 })
-                    ->whereNotNull('sales.webinar_id')
-                    ->select('webinars.*', 'sales.webinar_id', DB::raw('count(sales.webinar_id) as salesCounts'))
-                    ->groupBy('sales.webinar_id')
+                    ->whereNotNull("sales.{$this->columnId}")
+                    ->select("{$this->tableName}.*", "sales.{$this->columnId}", DB::raw("count(sales.{$this->columnId}) as salesCounts"))
+                    ->groupBy("sales.{$this->columnId}")
                     ->orderBy('salesCounts', 'desc');
             }
 
             if ($sort == 'best_rates') {
                 $query->leftJoin('webinar_reviews', function ($join) {
-                    $join->on('webinars.id', '=', 'webinar_reviews.webinar_id');
+                    $join->on("{$this->tableName}.id", '=', "webinar_reviews.{$this->columnId}");
                     $join->where('webinar_reviews.status', 'active');
                 })
                     ->whereNotNull('rates')
-                    ->select('webinars.*', DB::raw('avg(rates) as rates'))
-                    ->groupBy('webinars.id')
+                    ->select("{$this->tableName}.*", DB::raw('avg(rates) as rates'))
+                    ->groupBy("{$this->tableName}.id")
                     ->orderBy('rates', 'desc');
             }
         }
 
         if (!empty($filterOptions) and is_array($filterOptions)) {
             $webinarIdsFilterOptions = WebinarFilterOption::whereIn('filter_option_id', $filterOptions)
-                ->pluck('webinar_id')
+                ->pluck($this->columnId)
                 ->toArray();
 
-            $query->whereIn('webinars.id', $webinarIdsFilterOptions);
-        }
-
-        if (!empty($typeOptions) and is_array($typeOptions)) {
-            $query->whereIn('webinars.type', $typeOptions);
-        }
-
-        if (!empty($moreOptions) and is_array($moreOptions)) {
-            if (in_array('subscribe', $moreOptions)) {
-                $query->where('subscribe', 1);
-            }
-
-            if (in_array('certificate_included', $moreOptions)) {
-                $query->whereHas('quizzes', function ($query) {
-                    $query->where('certificate', 1)
-                        ->where('status', 'active');
-                });
-            }
-
-            if (in_array('with_quiz', $moreOptions)) {
-                $query->whereHas('quizzes', function ($query) {
-                    $query->where('status', 'active');
-                });
-            }
-
-            if (in_array('featured', $moreOptions)) {
-                $query->whereHas('feature', function ($query) {
-                    $query->whereIn('page', ['home_categories', 'categories'])
-                        ->where('status', 'publish');
-                });
-            }
+            $query->whereIn("{$this->tableName}.id", $webinarIdsFilterOptions);
         }
 
         return $query;

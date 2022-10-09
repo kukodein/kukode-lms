@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\File;
 use App\Models\Translation\FileTranslation;
 use App\Models\Webinar;
+use App\Models\WebinarChapterItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -17,7 +18,7 @@ class FileController extends Controller
     {
         $this->authorize('admin_webinars_edit');
 
-        $data = $request->all();
+        $data = $request->get('ajax')['new'];
 
         if (empty($data['storage'])) {
             $data['storage'] = 'upload';
@@ -27,7 +28,7 @@ class FileController extends Controller
             $data['file_path'] = $data['file_path'][0];
         }
 
-        $sourceRequiredFileType = ['external_link', 's3', 'google_drive'];
+        $sourceRequiredFileType = ['external_link', 's3', 'google_drive', 'upload'];
         $sourceDefaultFileTypeAndVolume = ['youtube', 'vimeo', 'iframe'];
 
         if (in_array($data['storage'], $sourceDefaultFileTypeAndVolume)) {
@@ -72,6 +73,14 @@ class FileController extends Controller
             $data['downloadable'] = true;
         }
 
+        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
+            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
+            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
+        } else {
+            $data['check_previous_parts'] = false;
+            $data['access_after_day'] = null;
+        }
+
         $webinar = Webinar::find($data['webinar_id']);
 
         if (!empty($webinar)) {
@@ -96,7 +105,8 @@ class FileController extends Controller
                 $data['interactive_file_path'] = $this->handleUnZipFile($data, $user->id);
 
             } elseif ($data['storage'] == 'upload') {
-                $fileInfos = $this->fileInfo($data['file_path']);
+                $uploadFile = $this->fileInfo($data['file_path']);
+                $data['volume'] = $uploadFile['size'];
             } elseif ($data['storage'] == 's3') {
                 $result = $this->uploadFileToS3($data['s3_file'], $user->id);
 
@@ -118,7 +128,7 @@ class FileController extends Controller
                 'webinar_id' => $data['webinar_id'],
                 'chapter_id' => $data['chapter_id'],
                 'file' => $data['file_path'],
-                'volume' => formatSizeUnits(!empty($fileInfos) ? $fileInfos['size'] : ($volumeMatches[0] * 1048576)),
+                'volume' => formatSizeUnits(!empty($fileInfos) ? $fileInfos['size'] : $data['volume']),
                 'file_type' => !empty($fileInfos) ? $fileInfos['extension'] : $data['file_type'],
                 'accessibility' => $data['accessibility'],
                 'storage' => $data['storage'],
@@ -126,6 +136,9 @@ class FileController extends Controller
                 'interactive_file_name' => $data['interactive_file_name'] ?? null,
                 'interactive_file_path' => $data['interactive_file_path'] ?? null,
                 'downloadable' => $data['downloadable'],
+                'online_viewer' => (!empty($data['online_viewer']) and $data['online_viewer'] == 'on'),
+                'check_previous_parts' => $data['check_previous_parts'],
+                'access_after_day' => $data['access_after_day'],
                 'status' => (!empty($data['status']) and $data['status'] == 'on') ? File::$Active : File::$Inactive,
                 'created_at' => time()
             ]);
@@ -138,6 +151,10 @@ class FileController extends Controller
                     'title' => $data['title'],
                     'description' => $data['description'],
                 ]);
+
+                if (!empty($file->chapter_id)) {
+                    WebinarChapterItem::makeItem($file->creator_id, $file->chapter_id, $file->id, WebinarChapterItem::$chapterFile);
+                }
             }
 
             return response()->json([
@@ -179,9 +196,9 @@ class FileController extends Controller
     {
         $this->authorize('admin_webinars_edit');
 
-        $data = $request->all();
+        $data = $request->get('ajax')[$id];
 
-        $sourceRequiredFileType = ['external_link', 's3', 'google_drive'];
+        $sourceRequiredFileType = ['external_link', 's3', 'google_drive', 'upload'];
 
         if (empty($data['storage'])) {
             $data['storage'] = 'upload';
@@ -228,6 +245,14 @@ class FileController extends Controller
             $data['downloadable'] = true;
         }
 
+        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
+            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
+            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
+        } else {
+            $data['check_previous_parts'] = false;
+            $data['access_after_day'] = null;
+        }
+
         $volumeMatches = ['0'];
         $fileInfos = null;
 
@@ -249,7 +274,8 @@ class FileController extends Controller
             $data['interactive_file_path'] = $this->handleUnZipFile($data, $file->creator_id);
 
         } elseif ($data['storage'] == 'upload') {
-            $fileInfos = $this->fileInfo($data['file_path']);
+            $uploadFile = $this->fileInfo($data['file_path']);
+            $data['volume'] = $uploadFile['size'];
         } elseif ($data['storage'] == 's3') {
             if (!empty($data['s3_file'])) {
                 $result = $this->uploadFileToS3($data['s3_file'], $file->creator_id);
@@ -272,7 +298,7 @@ class FileController extends Controller
         if (!empty($file)) {
             $file->update([
                 'file' => $data['file_path'],
-                'volume' => formatSizeUnits(!empty($fileInfos) ? $fileInfos['size'] : ($volumeMatches[0] * 1048576)),
+                'volume' => formatSizeUnits(!empty($fileInfos) ? $fileInfos['size'] : $data['volume']),
                 'file_type' => !empty($fileInfos) ? $fileInfos['extension'] : $data['file_type'],
                 'accessibility' => $data['accessibility'],
                 'storage' => $data['storage'],
@@ -280,6 +306,9 @@ class FileController extends Controller
                 'interactive_file_name' => $data['interactive_file_name'] ?? null,
                 'interactive_file_path' => $data['interactive_file_path'] ?? null,
                 'downloadable' => $data['downloadable'],
+                'online_viewer' => (!empty($data['online_viewer']) and $data['online_viewer'] == 'on'),
+                'check_previous_parts' => $data['check_previous_parts'],
+                'access_after_day' => $data['access_after_day'],
                 'status' => (!empty($data['status']) and $data['status'] == 'on') ? File::$Active : File::$Inactive,
                 'updated_at' => time()
             ]);
@@ -291,6 +320,15 @@ class FileController extends Controller
                 'title' => $data['title'],
                 'description' => $data['description'],
             ]);
+
+            WebinarChapterItem::where('user_id', $file->creator_id)
+                ->where('item_id', $file->id)
+                ->where('type', WebinarChapterItem::$chapterFile)
+                ->delete();
+
+            if (!empty($file->chapter_id)) {
+                WebinarChapterItem::makeItem($file->creator_id, $file->chapter_id, $file->id, WebinarChapterItem::$chapterFile);
+            }
 
             removeContentLocale();
 
@@ -401,9 +439,16 @@ class FileController extends Controller
             ->first();
 
         if (!empty($file)) {
+            WebinarChapterItem::where('user_id', $file->creator_id)
+                ->where('item_id', $file->id)
+                ->where('type', WebinarChapterItem::$chapterFile)
+                ->delete();
+
             $file->delete();
         }
 
-        return redirect()->back();
+        return response()->json([
+            'code' => 200
+        ], 200);
     }
 }

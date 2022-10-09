@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\PayoutExport;
 use App\Http\Controllers\Controller;
 use App\Models\Accounting;
 use App\Models\Payout;
@@ -9,6 +10,7 @@ use App\Models\Role;
 use App\Models\Setting;
 use App\User;
 use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PayoutController extends Controller
 {
@@ -31,7 +33,7 @@ class PayoutController extends Controller
         $roles = Role::all();
 
         $data = [
-            'pageTitle' => trans('admin/main.payouts_title') . (($payoutType == 'requests') ? 'Requests' : 'history'),
+            'pageTitle' => ($payoutType == 'requests') ? trans('financial.payouts_requests') : trans('financial.payouts_history'),
             'payouts' => $payouts,
             'roles' => $roles,
         ];
@@ -144,4 +146,25 @@ class PayoutController extends Controller
         return back();
     }
 
+    public function exportExcel(Request $request)
+    {
+        $this->authorize('admin_payouts_export_excel');
+
+        $payoutType = $request->get('payout', 'requests'); //requests or history
+
+        $query = Payout::query();
+        if ($payoutType == 'requests') {
+            $query->where('status', Payout::$waiting);
+        } else {
+            $query->where('status', '!=', Payout::$waiting);
+        }
+
+        $payouts = $this->filters($query, $request)->get();
+
+        $export = new PayoutExport($payouts);
+
+        $filename = ($payoutType == 'requests') ? trans('financial.payouts_requests') : trans('financial.payouts_history');
+
+        return Excel::download($export, $filename . '.xlsx');
+    }
 }

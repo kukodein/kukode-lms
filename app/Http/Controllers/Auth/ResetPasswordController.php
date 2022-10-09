@@ -32,10 +32,17 @@ class ResetPasswordController extends Controller
      */
     protected $redirectTo = RouteServiceProvider::HOME;
 
-    public function getPassword($token)
+    public function showResetForm(Request $request, $token)
     {
+        $updatePassword = DB::table('password_resets')
+            ->where(['email' => $request->email, 'token' => $token])
+            ->first();
 
-        return view(getTemplate() . '.auth.reset_password', ['token' => $token]);
+        if (!empty($updatePassword)) {
+            return view(getTemplate() . '.auth.reset_password', ['token' => $token]);
+        }
+
+        abort(404);
     }
 
     public function updatePassword(Request $request)

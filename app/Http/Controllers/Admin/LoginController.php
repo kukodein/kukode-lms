@@ -43,7 +43,12 @@ class LoginController extends Controller
 
     public function showLoginForm()
     {
-        return view('admin.auth.login');
+        $data = [
+            'pageTitle' => trans('auth.login'),
+        ];
+
+
+        return view('admin.auth.login', $data);
     }
 
     /**
@@ -98,7 +103,9 @@ class LoginController extends Controller
             'password' => 'Wrong password or this account not approved yet.',
         ]);
     }
-    public function logout(Request $request) {
+
+    public function logout(Request $request)
+    {
         Auth::logout();
         return redirect('/admin/login');
     }

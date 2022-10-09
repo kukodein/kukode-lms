@@ -27,10 +27,11 @@
 
 
                             <div class="empty-state mx-auto d-block"  data-width="900" >
-                                <img class="img-fluid col-md-6" src="/assets/default/img/lic.svg" alt="image">
-                                <h3 class="mt-3">Please activate your license!</h3>
+                                <img class="img-fluid col-md-6" src="/assets/default/img/plugin.svg" alt="image">
+                                <h3 class="mt-3">This is a paid plugin!</h3>
                                 <h5 class="lead">
-                                You can activate your license by <strong><a href="mailto:rocketsoftsolutions@gmail.com">contacting support</a></strong> our checking <strong><a href="https://crm.rocket-soft.org/index.php/tickets">CRM</a></strong>  </h5>      
+                                    You can purchase it by <strong><a href="https://codecanyon.net/item/universal-plugins-bundle-for-rocket-lms/33297004">this link</a></strong> on Codecanyon.
+                                </h5>             
                               </div>
 
 
