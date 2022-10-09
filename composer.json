@@ -77,6 +77,7 @@
         ],
         "files": [
             "app/Helpers/helper.php",
+            "app/Helpers/apihelper.php",
             "app/Mixins/Geo/Geo.php"
         ]
     },
