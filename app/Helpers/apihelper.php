@@ -38,16 +38,16 @@ use App\Http\Controllers\Api\Config\ConfigController;
 //     return $price ? (ConfigController::get()['currency']['sign'] . (number_format($price, 2, ".", "") + 0)) : $price;
 // }
 
-function apiAuth()
-{
+// function apiAuth()
+// {
   
-   if(request()->input('test_auth_id')){
-     return App\Models\Api\User::find(request()->input('test_auth_id'))??die('test_auth_id not found') ;
-   }
-   return auth('api')->user();
+//    if(request()->input('test_auth_id')){
+//      return App\Models\Api\User::find(request()->input('test_auth_id'))??die('test_auth_id not found') ;
+//    }
+//    return auth('api')->user();
    
    
-}
+// }
 
 
 
