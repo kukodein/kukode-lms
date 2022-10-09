@@ -22,16 +22,16 @@ use App\Http\Controllers\Api\Config\ConfigController;
 //     return $response->apiResponse2($success, $status, $msg, $data);
 // }
 
-function getUrl($path)
-{
-    if (!$path) {
-        return null;
-    }
-    if (substr($path, 0, 1) == '/') {
-        $path = substr($path, 1);
-    }
-    return config('app.url') . $path;
-}
+// function getUrl($path)
+// {
+//     if (!$path) {
+//         return null;
+//     }
+//     if (substr($path, 0, 1) == '/') {
+//         $path = substr($path, 1);
+//     }
+//     return config('app.url') . $path;
+// }
 
 function getPrice($price)
 {
