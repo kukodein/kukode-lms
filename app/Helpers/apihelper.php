@@ -1,26 +1,26 @@
 <?php
 
-// use App\Api\Response;
-// use App\Api\Request;
+use App\Api\Response;
+use App\Api\Request;
 use App\Http\Controllers\Api\Config\ConfigController;
 
-function apiResponse($status, $msg = null, $data = null, $http_status = null)
-{
-    $response = new Response();
-    return $response->apiResponse($status, $msg, $data, $http_status);
-}
+// function apiResponse($status, $msg = null, $data = null, $http_status = null)
+// {
+//     $response = new Response();
+//     return $response->apiResponse($status, $msg, $data, $http_status);
+// }
 
-function validateParam($request_input, $rules, $somethingElseIsInvalid = null)
-{
-    $request = new Request();
-    return $request->validateParam($request_input, $rules, $somethingElseIsInvalid);
-}
+// function validateParam($request_input, $rules, $somethingElseIsInvalid = null)
+// {
+//     $request = new Request();
+//     return $request->validateParam($request_input, $rules, $somethingElseIsInvalid);
+// }
 
-function apiResponse2($success, $status, $msg, $data = null)
-{
-    $response = new Response();
-    return $response->apiResponse2($success, $status, $msg, $data);
-}
+// function apiResponse2($success, $status, $msg, $data = null)
+// {
+//     $response = new Response();
+//     return $response->apiResponse2($success, $status, $msg, $data);
+// }
 
 function getUrl($path)
 {
