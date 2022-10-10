@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['impersonate', 'panel', 'share']], function () {
+Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['check_mobile_app', 'impersonate', 'panel', 'share']], function () {
 
     Route::get('/', 'DashboardController@dashboard');
 
@@ -32,6 +32,10 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
             Route::get('/{id}/export-students-list', 'WebinarController@exportStudentsList');
             Route::post('/order-items', 'WebinarController@orderItems');
             Route::post('/{id}/getContentItemByLocale', 'WebinarController@getContentItemByLocale');
+
+            Route::group(['prefix' => '{webinar_id}/statistics'], function () {
+                Route::get('/', 'WebinarStatisticController@index');
+            });
         });
 
         Route::get('/organization_classes', 'WebinarController@organizationClasses');
@@ -85,8 +89,7 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
         Route::group(['prefix' => 'results'], function () {
             Route::get('/', 'QuizController@results');
             Route::get('/{quizResultId}/delete', 'QuizController@destroyQuizResult');
-            Route::get('/{quizResultId}/downloadCertificate', 'CertificateController@downloadCertificate');
-            Route::get('/{quizResultId}/showCertificate', 'CertificateController@showCertificate');
+            Route::get('/{quizResultId}/showCertificate', 'CertificateController@makeCertificate');
         });
 
         Route::get('/{quizResultId}/edit-result', 'QuizController@editResult');
@@ -128,12 +131,19 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
         Route::post('/store', 'ChapterController@store');
         Route::post('/{id}/update', 'ChapterController@update');
         Route::get('/{id}/delete', 'ChapterController@destroy');
+        Route::post('/change', 'ChapterController@change');
     });
 
     Route::group(['prefix' => 'files'], function () {
         Route::post('/store', 'FileController@store');
         Route::post('/{id}/update', 'FileController@update');
         Route::get('/{id}/delete', 'FileController@destroy');
+    });
+
+    Route::group(['prefix' => 'assignments'], function () {
+        Route::post('/store', 'AssignmentController@store');
+        Route::post('/{id}/update', 'AssignmentController@update');
+        Route::get('/{id}/delete', 'AssignmentController@destroy');
     });
 
     Route::group(['prefix' => 'text-lesson'], function () {
@@ -154,6 +164,12 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
         Route::get('/{id}/delete', 'FAQController@destroy');
     });
 
+    Route::group(['prefix' => 'webinar-extra-description'], function () {
+        Route::post('/store', 'WebinarExtraDescriptionController@store');
+        Route::post('/{id}/update', 'WebinarExtraDescriptionController@update');
+        Route::get('/{id}/delete', 'WebinarExtraDescriptionController@destroy');
+    });
+
     Route::group(['prefix' => 'webinar-quiz'], function () {
         Route::post('/store', 'WebinarQuizController@store');
         Route::post('/{id}/update', 'WebinarQuizController@update');
@@ -164,6 +180,11 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
     Route::group(['prefix' => 'certificates'], function () {
         Route::get('/', 'CertificateController@lists');
         Route::get('/achievements', 'CertificateController@achievements');
+
+        Route::group(['prefix' => 'webinars'], function () {
+            Route::get('/', 'WebinarCertificateController@index');
+            Route::get('/{certificateId}/show', 'WebinarCertificateController@makeCertificate');
+        });
     });
 
     Route::group(['prefix' => 'meetings'], function () {
@@ -211,6 +232,7 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
         Route::post('/metas', 'UserController@storeMetas');
         Route::post('metas/{meta_id}/update', 'UserController@updateMeta');
         Route::get('metas/{meta_id}/delete', 'UserController@deleteMeta');
+        Route::get('/deleteAccount', 'UserController@deleteAccount');
     });
 
     Route::group(['prefix' => 'support'], function () {
@@ -267,6 +289,135 @@ Route::group(['namespace' => 'Panel', 'prefix' => 'panel', 'middleware' => ['imp
     Route::group(['prefix' => 'rewards'], function () {
         Route::get('/', 'RewardController@index');
         Route::post('/exchange', 'RewardController@exchange');
+    });
+
+    Route::group(['prefix' => 'store', 'namespace' => 'Store'], function () {
+        Route::group(['middleware' => 'user.not.access'], function () {
+
+            Route::group(['prefix' => 'products'], function () {
+                Route::get('/', 'ProductController@index');
+                Route::get('/new', 'ProductController@create');
+                Route::post('/store', 'ProductController@store');
+                Route::get('/{id}/step/{step?}', 'ProductController@edit');
+                Route::get('/{id}/edit', 'ProductController@edit');
+                Route::post('/{id}/update', 'ProductController@update');
+                Route::get('/{id}/delete', 'ProductController@destroy');
+                Route::post('/{id}/getContentItemByLocale', 'ProductController@getContentItemByLocale');
+
+                Route::group(['prefix' => 'filters'], function () {
+                    Route::get('/get-by-category-id/{categoryId}', 'ProductFilterController@getByCategoryId');
+                });
+
+                Route::group(['prefix' => 'specifications'], function () {
+                    Route::get('/{id}/get', 'ProductSpecificationController@getItem');
+                    Route::post('/store', 'ProductSpecificationController@store');
+                    Route::post('/{id}/update', 'ProductSpecificationController@update');
+                    Route::get('/{id}/delete', 'ProductSpecificationController@destroy');
+                    Route::post('/order-items', 'ProductSpecificationController@orderItems');
+                    Route::post('/search', 'ProductSpecificationController@search');
+                    Route::get('/get-by-category-id/{categoryId}', 'ProductSpecificationController@getByCategoryId');
+                });
+
+                Route::group(['prefix' => 'files'], function () {
+                    Route::post('/store', 'ProductFileController@store');
+                    Route::post('/{id}/update', 'ProductFileController@update');
+                    Route::get('/{id}/delete', 'ProductFileController@destroy');
+                    Route::post('/order-items', 'ProductFileController@orderItems');
+                });
+
+                Route::group(['prefix' => 'faqs'], function () {
+                    Route::post('/store', 'ProductFaqController@store');
+                    Route::post('/{id}/update', 'ProductFaqController@update');
+                    Route::get('/{id}/delete', 'ProductFaqController@destroy');
+                    Route::post('/order-items', 'ProductFaqController@orderItems');
+                });
+
+                Route::group(['prefix' => 'comments'], function () {
+                    Route::get('/', 'CommentController@index');
+                });
+            });
+
+            Route::group(['prefix' => 'sales'], function () {
+                Route::get('/', 'SaleController@index');
+                Route::get('/{id}/productOrder/{order_id}/invoice', 'SaleController@invoice');
+                Route::get('/{id}/getProductOrder/{order_id}', 'SaleController@getProductOrder');
+                Route::post('/{id}/productOrder/{order_id}/setTrackingCode', 'SaleController@setTrackingCode');
+            });
+        });
+
+        Route::group(['prefix' => 'purchases'], function () {
+            Route::get('/', 'MyPurchaseController@index');
+            Route::get('/{id}/getProductOrder/{order_id}', 'MyPurchaseController@getProductOrder');
+            Route::get('/{id}/productOrder/{order_id}/setGotTheParcel', 'MyPurchaseController@setGotTheParcel');
+            Route::get('/{id}/productOrder/{order_id}/invoice', 'MyPurchaseController@invoice');
+        });
+
+
+        Route::group(['prefix' => 'products'], function () {
+
+            Route::get('/my-comments', 'CommentController@myComments');
+
+            Route::get('/files/{id}/download', 'ProductFileController@download');
+        });
+    });
+
+    Route::group(['prefix' => 'assignments'], function () {
+        Route::get('/my-assignments', 'AssignmentController@myAssignments');
+        Route::get('/my-courses-assignments', 'AssignmentController@myCoursesAssignments');
+        Route::get('/{id}/students', 'AssignmentController@students');
+    });
+
+    Route::group(['prefix' => 'bundles'], function () {
+        Route::group(['middleware' => 'user.not.access'], function () {
+            Route::get('/', 'BundlesController@index');
+            Route::get('/new', 'BundlesController@create');
+            Route::post('/store', 'BundlesController@store');
+            Route::get('/{id}/step/{step?}', 'BundlesController@edit');
+            Route::get('/{id}/edit', 'BundlesController@edit');
+            Route::post('/{id}/update', 'BundlesController@update');
+            Route::get('/{id}/delete', 'BundlesController@destroy');
+            Route::post('/{id}/getContentItemByLocale', 'BundlesController@getContentItemByLocale');
+            Route::get('/{id}/courses', 'BundlesController@courses');
+            Route::get('/{id}/export-students-list', 'BundlesController@exportStudentsList');
+        });
+    });
+
+    Route::group(['prefix' => 'bundle-webinars'], function () {
+        Route::post('/store', 'BundleWebinarsController@store');
+        Route::post('/{id}/update', 'BundleWebinarsController@update');
+        Route::get('/{id}/delete', 'BundleWebinarsController@destroy');
+    });
+
+    Route::group(['prefix' => 'course-noticeboard'], function () {
+        Route::get('/', 'CourseNoticeboardController@index');
+        Route::get('/new', 'CourseNoticeboardController@create');
+        Route::post('/store', 'CourseNoticeboardController@store');
+        Route::get('/{noticeboard_id}/edit', 'CourseNoticeboardController@edit');
+        Route::post('/{noticeboard_id}/update', 'CourseNoticeboardController@update');
+        Route::get('/{noticeboard_id}/delete', 'CourseNoticeboardController@delete');
+        Route::get('/{noticeboard_id}/saveStatus', 'CourseNoticeboardController@saveStatus');
+    });
+
+    Route::group(['prefix' => 'forums'], function () {
+        Route::get('/topics', 'ForumsController@topics');
+        Route::get('/topics/{id}/removeBookmarks', 'ForumsController@removeBookmarks');
+        Route::get('/posts', 'ForumsController@posts');
+        Route::get('/bookmarks', 'ForumsController@bookmarks');
+    });
+
+    Route::group(['prefix' => 'blog'], function () {
+        Route::group(['prefix' => 'posts'], function () {
+            Route::get('/', 'BlogPostsController@index');
+            Route::get('/new', 'BlogPostsController@create');
+            Route::post('/store', 'BlogPostsController@store');
+            Route::get('/{post_id}/edit', 'BlogPostsController@edit');
+            Route::post('/{post_id}/update', 'BlogPostsController@update');
+            Route::get('/{post_id}/delete', 'BlogPostsController@delete');
+        });
+
+        Route::group(['prefix' => 'comments'], function () {
+            Route::get('/', 'BlogCommentsController@index');
+        });
     });
 });
 

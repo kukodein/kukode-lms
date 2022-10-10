@@ -184,6 +184,8 @@ return [
         KingFlamez\Rave\RaveServiceProvider::class,
 
         App\Providers\MinioStorageServiceProvider::class,
+        Gathuku\Mpesa\MpesaServiceProvider::class,
+        Ssheduardo\Redsys\RedsysServiceProvider::class,
     ],
 
     /*
@@ -240,6 +242,8 @@ return [
         'Captcha' => Mews\Captcha\Facades\Captcha::class,
         'Share' => Jorenvh\Share\ShareFacade::class,
         'Rave' => KingFlamez\Rave\Facades\Rave::class,
+        'Mpesa' => Gathuku\Mpesa\Facades\Mpesa::class,
+        'Redsys'    => Ssheduardo\Redsys\Facades\Redsys::class,
     ],
 
 ];

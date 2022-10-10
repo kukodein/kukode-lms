@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Mixins\Certificate\MakeCertificate;
 use App\Models\Certificate;
 use App\Models\CertificateTemplate;
 use App\Models\Quiz;
@@ -157,23 +158,7 @@ class CertificateController extends Controller
         $grade = $request->get('grade');
 
 
-        if (!empty($from) and !empty($to)) {
-            $from = strtotime($from);
-            $to = strtotime($to);
-
-            $query->whereBetween('created_at', [$from, $to]);
-        } else {
-            if (!empty($from)) {
-                $from = strtotime($from);
-                $query->where('created_at', '>=', $from);
-            }
-
-            if (!empty($to)) {
-                $to = strtotime($to);
-
-                $query->where('created_at', '<', $to);
-            }
-        }
+        fromAndToDateFilter($from, $to, $query, 'created_at');
 
         if (!empty($webinar_id)) {
             $query->where('webinar_id', $webinar_id);
@@ -186,91 +171,11 @@ class CertificateController extends Controller
         return $query;
     }
 
-    public function downloadCertificate($quizResultId)
+    public function makeCertificate($quizResultId)
     {
         $user = auth()->user();
 
-        $makeCertificate = $this->makeCertificate($quizResultId);
-
-        $file_path = $this->saveCertificate($user, $makeCertificate);
-
-        if (!empty($file_path)) {
-            if (file_exists(public_path($file_path))) {
-                return response()->download(public_path($file_path));
-            }
-        }
-
-        abort(404);
-    }
-
-    public function showCertificate($quizResultId)
-    {
-        $user = auth()->user();
-        $makeCertificate = $this->makeCertificate($quizResultId);
-
-        $this->saveCertificate($user, $makeCertificate);
-
-        $img = $makeCertificate['img'];
-
-        return $img->response('png');
-    }
-
-    private function saveCertificate($user, $makeCertificate)
-    {
-        $quiz = $makeCertificate['quiz'];
-        $quizResult = $makeCertificate['quizResult'];
-        $img = $makeCertificate['img'];
-
-        if (!empty($img)) {
-            $path = public_path("store/$user->id/certificates");
-
-            if (!is_dir($path)) {
-                File::makeDirectory($path, 0777, true);
-            }
-
-            $file_path = $path . '/' . $quiz->webinar->title . '(' . $quiz->name . ').jpg';
-            if (is_file($file_path)) {
-                $file_path = $path . '/' . $quiz->webinar->title . '(' . $quiz->name . '-' . $quizResult->user_grade . ').jpg';
-            }
-
-            $img->save($file_path);
-
-            $file_path = '/' . explode('/public/', $file_path)[1];
-
-            $certificate = Certificate::where('quiz_id', $quiz->id)
-                ->where('student_id', $user->id)
-                ->where('quiz_result_id', $quizResult->id)
-                ->first();
-
-            $data = [
-                'quiz_id' => $quiz->id,
-                'student_id' => $user->id,
-                'quiz_result_id' => $quizResult->id,
-                'user_grade' => $quizResult->user_grade,
-                'file' => $file_path,
-                'created_at' => time()
-            ];
-
-            if (!empty($certificate)) {
-                $certificate->update($data);
-            } else {
-                Certificate::create($data);
-
-                $notifyOptions = [
-                    '[c.title]' => $quiz->webinar_title,
-                ];
-                sendNotification('new_certificate', $notifyOptions, $user->id);
-            }
-
-            return $file_path;
-        }
-
-        return null;
-    }
-
-    private function makeCertificate($quizResultId)
-    {
-        $user = auth()->user();
+        $makeCertificate = new MakeCertificate();
 
         $quizResult = QuizzesResult::where('id', $quizResultId)
             ->where('user_id', $user->id)
@@ -280,53 +185,8 @@ class CertificateController extends Controller
             }])
             ->first();
 
-        if (!empty($quizResult) and !empty($quizResult->quiz) and $quizResult->quiz->certificate) {
-            $certificateTemplate = CertificateTemplate::where('status', 'publish')->first();
-
-            if (!empty($certificateTemplate)) {
-                $quiz = $quizResult->quiz;
-
-                $certificate = Certificate::where('quiz_id', $quiz->id)
-                    ->where('student_id', $user->id)
-                    ->where('quiz_result_id', $quizResult->id)
-                    ->first();
-
-                if (empty($certificate)) {
-                    $certificate = Certificate::create([
-                        'quiz_id' => $quiz->id,
-                        'student_id' => $user->id,
-                        'quiz_result_id' => $quizResult->id,
-                        'created_at' => time()
-                    ]);
-                }
-
-                $certificateReward = RewardAccounting::calculateScore(Reward::CERTIFICATE);
-                RewardAccounting::makeRewardAccounting($certificate->student_id, $certificateReward, Reward::CERTIFICATE, $certificate->id, true);
-
-                $img = Image::make(public_path($certificateTemplate->image));
-                $body = $certificateTemplate->body;
-                $body = str_replace('[student]', $user->full_name, $body);
-                $body = str_replace('[course]', $quiz->webinar->title, $body);
-                $body = str_replace('[grade]', $quizResult->user_grade, $body);
-                $body = str_replace('[certificate_id]', $certificate->id, $body);
-
-                if ($certificateTemplate->rtl) {
-                    $Arabic = new \I18N_Arabic('Glyphs');
-                    $body = $Arabic->utf8Glyphs($body);
-                }
-
-                $img->text($body, $certificateTemplate->position_x, $certificateTemplate->position_y, function ($font) use ($certificateTemplate) {
-                    $font->file(public_path('assets/default/fonts/Montserrat-Medium.ttf'));
-                    $font->size($certificateTemplate->font_size);
-                    $font->color($certificateTemplate->text_color);
-                });
-
-                return [
-                    'img' => $img,
-                    'quizResult' => $quizResult,
-                    'quiz' => $quiz,
-                ];
-            }
+        if (!empty($quizResult)) {
+            return $makeCertificate->makeQuizCertificate($quizResult);
         }
 
         abort(404);

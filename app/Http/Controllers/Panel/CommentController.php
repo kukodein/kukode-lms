@@ -15,19 +15,25 @@ class CommentController extends Controller
     {
         $user = auth()->user();
 
-        $userWebinarsIds = $user->webinars->pluck('id')->toArray();
+        $query = Comment::where('status', 'active')
+            ->whereHas('webinar', function ($query) use ($user) {
+                $query->where(function ($query) use ($user) {
+                    $query->where('creator_id', $user->id);
+                    $query->orWhere('teacher_id', $user->id);
+                });
+            })
+            ->with([
+                'webinar' => function ($query) {
+                    $query->select('id', 'slug');
+                },
+                'user' => function ($qu) {
+                    $qu->select('id', 'full_name', 'avatar');
+                },
+                'replies'
+            ]);
 
-        $query = Comment::whereIn('webinar_id', $userWebinarsIds)
-            ->where('status', 'active')
-            ->with(['webinar' => function ($query) {
-                $query->select('id', 'slug');
-            }, 'user' => function ($qu) {
-                $qu->select('id', 'full_name', 'avatar');
-            }, 'replies']);
 
-
-        $repliedCommentsCount = clone $query;
-        $repliedCommentsCount = $repliedCommentsCount->whereNotNull('reply_id')->count();
+        $repliedCommentsCount = deepClone($query)->whereNotNull('reply_id')->count();
 
         $query = $this->filterComments($query, $request);
 
@@ -44,7 +50,6 @@ class CommentController extends Controller
         $data = [
             'pageTitle' => trans('panel.my_class_comments'),
             'comments' => $comments,
-            'newCommentsCount' => 1,
             'repliedCommentsCount' => $repliedCommentsCount,
         ];
 
@@ -82,24 +87,7 @@ class CommentController extends Controller
         $webinar = $request->get('webinar', null);
         $filter_new_comments = request()->get('new_comments', null);
 
-        if (!empty($from) and !empty($to)) {
-            $from = strtotime($from);
-            $to = strtotime($to);
-
-            $query->whereBetween('created_at', [$from, $to]);
-        } else {
-            if (!empty($from)) {
-                $from = strtotime($from);
-
-                $query->where('created_at', '>=', $from);
-            }
-
-            if (!empty($to)) {
-                $to = strtotime($to);
-
-                $query->where('created_at', '<', $to);
-            }
-        }
+        fromAndToDateFilter($from, $to, $query, 'created_at');
 
         if (!empty($user)) {
             $usersIds = User::where('full_name', 'like', "%$user%")->pluck('id')->toArray();
@@ -124,12 +112,14 @@ class CommentController extends Controller
     {
         $this->validate($request, [
             'user_id' => 'required',
-            'webinar_id' => 'required',
+            'webinar_id' => 'required_without:product_id',
+            'product_id' => 'required_without:webinar_id',
             'comment' => 'nullable',
         ]);
 
-        $comment = Comment::create([
+        Comment::create([
             'webinar_id' => $request->input('webinar_id'),
+            'product_id' => $request->input('product_id'),
             'user_id' => $request->input('user_id'),
             'comment' => $request->input('comment'),
             'reply_id' => $request->input('reply_id'),
@@ -173,7 +163,9 @@ class CommentController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        $comment->delete();
+        if (!empty($comment)) {
+            $comment->delete();
+        }
 
         return response()->json([
             'code' => 200
@@ -186,14 +178,20 @@ class CommentController extends Controller
             'comment' => 'required|string'
         ]);
 
-
         $user = auth()->user();
-        $userWebinarsIds = $user->webinars->pluck('id')->toArray();
 
         $comment = Comment::where('id', $id)
-            ->where(function ($query) use ($user, $userWebinarsIds) {
-                $query->where('user_id', $user)
-                    ->orWhereIn('webinar_id', $userWebinarsIds);
+            ->where(function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+                $query->orWhereHas('webinar', function ($query) use ($user) {
+                    $query->where(function ($query) use ($user) {
+                        $query->where('creator_id', $user->id);
+                        $query->orWhere('teacher_id', $user->id);
+                    });
+                });
+                $query->orWhereHas('product', function ($query) use ($user) {
+                    $query->where('creator_id', $user->id);
+                });
             })->first();
 
         if (!empty($comment)) {
@@ -202,6 +200,7 @@ class CommentController extends Controller
                 'user_id' => $user->id,
                 'comment' => $request->get('comment'),
                 'webinar_id' => $comment->webinar_id,
+                'product_id' => $comment->product_id,
                 'reply_id' => $comment->id,
                 'status' => 'active',
                 'created_at' => time()
@@ -222,18 +221,26 @@ class CommentController extends Controller
 
         $data = $request->all();
         $user = auth()->user();
-        $userWebinarsIds = $user->webinars->pluck('id')->toArray();
 
         $comment = Comment::where('id', $id)
-            ->where(function ($query) use ($user, $userWebinarsIds) {
-                $query->where('user_id', $user)
-                    ->orWhereIn('webinar_id', $userWebinarsIds);
+            ->where(function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+                $query->orWhereHas('webinar', function ($query) use ($user) {
+                    $query->where(function ($query) use ($user) {
+                        $query->where('creator_id', $user->id);
+                        $query->orWhere('teacher_id', $user->id);
+                    });
+                });
+                $query->orWhereHas('product', function ($query) use ($user) {
+                    $query->where('creator_id', $user->id);
+                });
             })->first();
 
         if (!empty($comment)) {
 
             CommentReport::create([
                 'webinar_id' => $comment->webinar_id,
+                'product_id' => $comment->product_id,
                 'user_id' => $user->id,
                 'comment_id' => $comment->id,
                 'message' => $data['message'],

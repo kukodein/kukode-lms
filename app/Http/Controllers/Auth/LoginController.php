@@ -67,7 +67,7 @@ class LoginController extends Controller
         ];
 
         if ($this->username() == 'email') {
-            $rules['username'] = 'required|string|email';
+            $rules['username'] = 'required|email';
         }
 
         $this->validate($request, $rules);

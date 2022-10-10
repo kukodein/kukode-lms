@@ -54,7 +54,7 @@ class salesExport implements FromCollection, WithHeadings, WithMapping
             $paidAmount = trans('admin/main.subscribe');
         } else {
             if (!empty($sale->total_amount)) {
-                $paidAmount = currencySign() . (handlePriceFormat($sale->total_amount));
+                $paidAmount = addCurrencyToPrice(handlePriceFormat($sale->total_amount));
             } else {
                 $paidAmount = trans('public.free');
             }
@@ -64,8 +64,8 @@ class salesExport implements FromCollection, WithHeadings, WithMapping
 
         return [
             $sale->id,
-            $sale->buyer->full_name,
-            $sale->buyer->id,
+            !empty($sale->buyer) ? $sale->buyer->full_name : 'Deleted User',
+            !empty($sale->buyer) ? $sale->buyer->id : 'Deleted User',
             $sale->item_seller,
             $sale->seller_id,
             $paidAmount,

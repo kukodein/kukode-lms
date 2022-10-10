@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Bundle;
 use App\Models\Comment;
 use App\Models\OfflinePayment;
 use App\Models\Payout;
@@ -19,6 +20,14 @@ class SidebarController extends Controller
             ->count();
 
         return ($waitingCoursesCount > 0);
+    }
+
+    public function getBundlesBeep()
+    {
+        $waitingBundlesCount = Bundle::where('status', Webinar::$pending)
+            ->count();
+
+        return ($waitingBundlesCount > 0);
     }
 
     public function getWebinarsBeep()

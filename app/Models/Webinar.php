@@ -52,6 +52,19 @@ class Webinar extends Model implements TranslatableContract
         return getTranslateAttributeValue($this, 'seo_description');
     }
 
+    public function getPriceAttribute()
+    {
+        $result = $this->attributes['price'] ?? null;
+
+        $user = auth()->user();
+
+        if (!empty($this->attributes['organization_price']) and !empty($user) and $this->creator->isOrganization() and $user->organ_id == $this->creator_id) {
+            $result = $this->attributes['organization_price'];
+        }
+
+        return $result;
+    }
+
     public function creator()
     {
         return $this->belongsTo('App\User', 'creator_id', 'id');
@@ -93,6 +106,11 @@ class Webinar extends Model implements TranslatableContract
         return $this->hasMany('App\Models\File', 'webinar_id', 'id');
     }
 
+    public function assignments()
+    {
+        return $this->hasMany('App\Models\WebinarAssignment', 'webinar_id', 'id');
+    }
+
     public function textLessons()
     {
         return $this->hasMany('App\Models\TextLesson', 'webinar_id', 'id');
@@ -101,6 +119,11 @@ class Webinar extends Model implements TranslatableContract
     public function faqs()
     {
         return $this->hasMany('App\Models\Faq', 'webinar_id', 'id');
+    }
+
+    public function webinarExtraDescription()
+    {
+        return $this->hasMany('App\Models\WebinarExtraDescription', 'webinar_id', 'id');
     }
 
     public function prerequisites()
@@ -148,6 +171,16 @@ class Webinar extends Model implements TranslatableContract
     public function feature()
     {
         return $this->hasOne('App\Models\FeatureWebinar', 'webinar_id', 'id');
+    }
+
+    public function noticeboards()
+    {
+        return $this->hasMany('App\Models\CourseNoticeboard', 'webinar_id', 'id');
+    }
+
+    public function forums()
+    {
+        return $this->hasMany('App\Models\CourseForum', 'webinar_id', 'id');
     }
 
     public function getRate()
@@ -274,7 +307,22 @@ class Webinar extends Model implements TranslatableContract
         return $capacity > 0 ? $capacity : 0;
     }
 
-    public function checkUserHasBought($user = null): bool
+    public function getExpiredAccessDays($purchaseDate)
+    {
+        return strtotime("+{$this->access_days} days", $purchaseDate);
+    }
+
+    public function checkHasExpiredAccessDays($purchaseDate)
+    {
+        // true => has access
+        // false => not access (expired)
+
+        $time = time();
+
+        return strtotime("+{$this->access_days} days", $purchaseDate) > $time;
+    }
+
+    public function checkUserHasBought($user = null, $checkExpired = true): bool
     {
         $hasBought = false;
 
@@ -287,6 +335,7 @@ class Webinar extends Model implements TranslatableContract
                 ->where('webinar_id', $this->id)
                 ->where('type', 'webinar')
                 ->whereNull('refund_at')
+                ->where('access_to_purchased_item', true)
                 ->first();
 
             if (!empty($sale)) {
@@ -314,6 +363,10 @@ class Webinar extends Model implements TranslatableContract
                         $hasBought = false;
                     }
                 }
+
+                if ($hasBought and !empty($this->access_days) and $checkExpired) {
+                    $hasBought = $this->checkHasExpiredAccessDays($sale->created_at);
+                }
             }
 
             if (!$hasBought) {
@@ -330,85 +383,201 @@ class Webinar extends Model implements TranslatableContract
                 $hasBought = $user->isAdmin();
             }
 
+            if (!$hasBought) {
+                $bundleWebinar = BundleWebinar::where('webinar_id', $this->id)
+                    ->with([
+                        'bundle'
+                    ])->get();
+
+                if ($bundleWebinar->isNotEmpty()) {
+                    foreach ($bundleWebinar as $item) {
+                        if (!empty($item->bundle) and $item->bundle->checkUserHasBought($user)) {
+                            $hasBought = true;
+                        }
+                    }
+                }
+            }
         }
 
         return $hasBought;
+    }
+
+    public function getFilesLearningProgressStat($userId = null)
+    {
+        $passed = 0;
+
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        $files = $this->files()
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($files as $file) {
+            $status = CourseLearning::where('user_id', $userId)
+                ->where('file_id', $file->id)
+                ->first();
+
+            if (!empty($status)) {
+                $passed += 1;
+            }
+        }
+
+        return [
+            'passed' => $passed,
+            'count' => count($files)
+        ];
+    }
+
+    public function getSessionsLearningProgressStat($userId = null)
+    {
+        $passed = 0;
+
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        $sessions = $this->sessions()
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($sessions as $session) {
+            $status = CourseLearning::where('user_id', $userId)
+                ->where('session_id', $session->id)
+                ->first();
+
+            if (!empty($status)) {
+                $passed += 1;
+            }
+        }
+
+        return [
+            'passed' => $passed,
+            'count' => count($sessions)
+        ];
+    }
+
+    public function getTextLessonsLearningProgressStat($userId = null)
+    {
+        $passed = 0;
+
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        $textLessons = $this->textLessons()
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($textLessons as $textLesson) {
+            $status = CourseLearning::where('user_id', $userId)
+                ->where('text_lesson_id', $textLesson->id)
+                ->first();
+
+            if (!empty($status)) {
+                $passed += 1;
+            }
+        }
+
+        return [
+            'passed' => $passed,
+            'count' => count($textLessons)
+        ];
+    }
+
+    public function getAssignmentsLearningProgressStat($userId = null)
+    {
+        $passed = 0;
+
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        $assignments = $this->assignments()
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($assignments as $assignment) {
+            $assignmentHistory = WebinarAssignmentHistory::where('assignment_id', $assignment->id)
+                ->where('student_id', $userId)
+                ->where('status', WebinarAssignmentHistory::$passed)
+                ->first();
+
+            if (!empty($assignmentHistory)) {
+                $passed += 1;
+            }
+        }
+
+        return [
+            'passed' => $passed,
+            'count' => count($assignments)
+        ];
+    }
+
+    public function getQuizzesLearningProgressStat($userId = null)
+    {
+        $passed = 0;
+
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        $quizzes = $this->quizzes()
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($quizzes as $quiz) {
+            $quizHistory = QuizzesResult::where('quiz_id', $quiz->id)
+                ->where('user_id', $userId)
+                ->where('status', QuizzesResult::$passed)
+                ->first();
+
+            if (!empty($quizHistory)) {
+                $passed += 1;
+            }
+        }
+
+        return [
+            'passed' => $passed,
+            'count' => count($quizzes)
+        ];
     }
 
     public function getProgress($isLearningPage = false)
     {
         $progress = 0;
 
-        if ($this->isWebinar()) {
-            if (auth()->check() and ($this->isProgressing() or $isLearningPage) and $this->checkUserHasBought()) {
-                $user_id = auth()->id();
-                $sessions = $this->sessions;
-                $files = $this->files;
-                $passed = 0;
-
-                foreach ($files as $file) {
-                    $status = CourseLearning::where('user_id', $user_id)
-                        ->where('file_id', $file->id)
-                        ->first();
-
-                    if (!empty($status)) {
-                        $passed += 1;
-                    }
-                }
-
-                foreach ($sessions as $session) {
-                    $status = CourseLearning::where('user_id', $user_id)
-                        ->where('session_id', $session->id)
-                        ->first();
-
-                    if (!empty($status)) {
-                        $passed += 1;
-                    }
-                }
-
-                if ($passed > 0) {
-                    $progress = ($passed * 100) / ($sessions->count() + $files->count());
-
-                    $this->handleLearningProgress100Reward($progress, $user_id, $this->id);
-                }
-            } else if (!empty($this->capacity)) {
-                $salesCount = !empty($this->sales_count) ? $this->sales_count : $this->sales()->count();
-
-                if ($salesCount > 0) {
-                    $progress = ($salesCount * 100) / $this->capacity;
-                }
-            }
-        } elseif ($this->checkUserHasBought()) {
+        if (
+            auth()->check() and
+            $this->checkUserHasBought() and
+            (
+                !$this->isWebinar() or
+                ($this->isWebinar() and $this->isProgressing()) or
+                $isLearningPage
+            )
+        ) {
             $user_id = auth()->id();
-            $files = $this->files;
-            $textLessons = $this->textLessons;
 
-            $passed = 0;
+            $filesStat = $this->getFilesLearningProgressStat($user_id);
+            $sessionsStat = $this->getSessionsLearningProgressStat($user_id);
+            $textLessonsStat = $this->getTextLessonsLearningProgressStat($user_id);
+            $assignmentsStat = $this->getAssignmentsLearningProgressStat($user_id);
+            $quizzesStat = $this->getQuizzesLearningProgressStat($user_id);
 
-            foreach ($files as $file) {
-                $status = CourseLearning::where('user_id', $user_id)
-                    ->where('file_id', $file->id)
-                    ->first();
+            $passed = $filesStat['passed'] + $sessionsStat['passed'] + $textLessonsStat['passed'] + $assignmentsStat['passed'] + $quizzesStat['passed'];
+            $count = $filesStat['count'] + $sessionsStat['count'] + $textLessonsStat['count'] + $assignmentsStat['count'] + $quizzesStat['count'];
 
-                if (!empty($status)) {
-                    $passed += 1;
-                }
-            }
-
-            foreach ($textLessons as $textLesson) {
-                $status = CourseLearning::where('user_id', $user_id)
-                    ->where('text_lesson_id', $textLesson->id)
-                    ->first();
-
-                if (!empty($status)) {
-                    $passed += 1;
-                }
-            }
-
-            if ($passed > 0) {
-                $progress = ($passed * 100) / ($files->count() + $textLessons->count());
+            if ($passed > 0 and $count > 0) {
+                $progress = ($passed * 100) / $count;
 
                 $this->handleLearningProgress100Reward($progress, $user_id, $this->id);
+            }
+        } else if ($this->isWebinar() and !empty($this->capacity)) {
+            $salesCount = !empty($this->sales_count) ? $this->sales_count : $this->sales()->count();
+
+            if ($salesCount > 0) {
+                $progress = ($salesCount * 100) / $this->capacity;
             }
         }
 
@@ -443,6 +612,16 @@ class Webinar extends Model implements TranslatableContract
         return url('/course/learning/' . $this->slug);
     }
 
+    public function getNoticeboardsPageUrl()
+    {
+        return $this->getLearningPageUrl() . '/noticeboards';
+    }
+
+    public function getForumPageUrl()
+    {
+        return $this->getLearningPageUrl() . '/forum';
+    }
+
     public function isCourse()
     {
         return ($this->type == 'course');
@@ -473,13 +652,32 @@ class Webinar extends Model implements TranslatableContract
 
     public function canSale()
     {
-        $salesCount = !empty($this->sales_count) ? $this->sales_count : $this->sales()->count();
-
         if ($this->type == 'webinar') {
+            $salesCount = !empty($this->sales_count) ? $this->sales_count : $this->sales()->count();
+
             return ($this->start_date > time() and $salesCount < $this->capacity);
         }
 
         return true;
+    }
+
+    public function cantSaleStatus($hasBought)
+    {
+        $status = '';
+
+        if ($hasBought) {
+            $status = 'js-course-has-bought-status';
+        } elseif ($this->type == 'webinar') {
+            $salesCount = !empty($this->sales_count) ? $this->sales_count : $this->sales()->count();
+
+            if ($salesCount >= $this->capacity) {
+                $status = 'js-course-not-capacity-status';
+            } elseif ($this->start_date <= time()) {
+                $status = 'js-course-has-started-status';
+            }
+        }
+
+        return $status;
     }
 
     public function addToCalendarLink()
@@ -543,24 +741,14 @@ class Webinar extends Model implements TranslatableContract
 
     public function getShareLink($social)
     {
-        $link = '';
+        $link = ShareFacade::page($this->getUrl())
+            ->facebook()
+            ->twitter()
+            ->whatsapp()
+            ->telegram()
+            ->getRawLinks();
 
-        switch ($social) {
-            case 'facebook':
-                $link = ShareFacade::page($this->getUrl())->facebook()->getRawLinks();
-                break;
-            case 'twitter':
-                $link = ShareFacade::page($this->getUrl())->twitter()->getRawLinks();
-                break;
-            case 'whatsapp':
-                $link = ShareFacade::page($this->getUrl())->whatsapp()->getRawLinks();
-                break;
-            case 'telegram':
-                $link = ShareFacade::page($this->getUrl())->telegram()->getRawLinks();
-                break;
-        }
-
-        return $link;
+        return !empty($link[$social]) ? $link[$social] : '';
     }
 
     public function isDownloadable()
@@ -576,5 +764,25 @@ class Webinar extends Model implements TranslatableContract
         }
 
         return $downloadable;
+    }
+
+    public function isOwner($userId = null)
+    {
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        return (($this->creator_id == $userId) or ($this->teacher_id == $userId));
+    }
+
+    public function isPartnerTeacher($userId = null)
+    {
+        if (empty($userId)) {
+            $userId = auth()->id();
+        }
+
+        $partnerTeachers = !empty($this->webinarPartnerTeacher) ? $this->webinarPartnerTeacher->pluck('teacher_id')->toArray() : [];
+
+        return in_array($userId, $partnerTeachers);
     }
 }

@@ -18,6 +18,7 @@ class ReserveMeetingController extends Controller
     {
         $user = auth()->user();
         $reserveMeetingsQuery = ReserveMeeting::where('user_id', $user->id)
+            ->whereNotNull('reserved_at')
             ->whereHas('sale');
 
         $openReserveCount = deepClone($reserveMeetingsQuery)->where('status', \App\models\ReserveMeeting::$open)->count();
@@ -52,7 +53,10 @@ class ReserveMeetingController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
-        $activeMeetingTimeIds = ReserveMeeting::where('user_id', $user->id)->where('status', ReserveMeeting::$open)->pluck('meeting_time_id');
+        $activeMeetingTimeIds = ReserveMeeting::where('user_id', $user->id)
+            ->where('status', ReserveMeeting::$open)
+            ->whereHas('sale')
+            ->pluck('meeting_time_id');
 
         $activeMeetingTimes = MeetingTime::whereIn('id', $activeMeetingTimeIds)->get();
 
@@ -102,6 +106,7 @@ class ReserveMeetingController extends Controller
 
         $activeMeetingTimeIds = ReserveMeeting::whereIn('meeting_id', $meetingIds)
             ->where('status', ReserveMeeting::$pending)
+            ->whereHas('sale')
             ->pluck('meeting_time_id')
             ->toArray();
 
@@ -143,23 +148,8 @@ class ReserveMeetingController extends Controller
         $status = $request->get('status');
         $openMeetings = $request->get('open_meetings');
 
-        if (!empty($from) and !empty($to)) {
-            $from = strtotime($from);
-            $to = strtotime($to);
-
-            $query->whereBetween('created_at', [$from, $to]);
-        } else {
-            if (!empty($from)) {
-                $from = strtotime($from);
-                $query->where('created_at', '>=', $from);
-            }
-
-            if (!empty($to)) {
-                $to = strtotime($to);
-
-                $query->where('created_at', '<', $to);
-            }
-        }
+        // $from and $to
+        $query = fromAndToDateFilter($from, $to, $query, 'created_at');
 
         if (!empty($day) and $day != 'all') {
             $meetingTimeIds = $query->pluck('meeting_time_id');
@@ -237,8 +227,14 @@ class ReserveMeetingController extends Controller
             'link' => 'required|url'
         ]);
 
+        $user = auth()->user();
+
+        $meetingIds = Meeting::where('creator_id', $user->id)->pluck('id');
+
         $link = $request->input('link');
-        $ReserveMeeting = ReserveMeeting::where('id', $request->input('item_id'))->first();
+        $ReserveMeeting = ReserveMeeting::where('id', $request->input('item_id'))
+            ->whereIn('meeting_id', $meetingIds)
+            ->first();
 
         if (!empty($ReserveMeeting) and !empty($ReserveMeeting->meeting)) {
             $ReserveMeeting->update([
@@ -262,8 +258,21 @@ class ReserveMeetingController extends Controller
 
     public function join(Request $request, $id)
     {
-        $ReserveMeeting = ReserveMeeting::where('id', $id)->first();
+        $user = auth()->user();
 
-        return Redirect::away($ReserveMeeting->link);
+        $meetingIds = Meeting::where('creator_id', $user->id)->pluck('id');
+
+        $ReserveMeeting = ReserveMeeting::where('id', $id)
+            ->where(function ($query) use ($user, $meetingIds) {
+                $query->where('user_id', $user->id)
+                    ->orWhereIn('meeting_id', $meetingIds);
+            })
+            ->first();
+
+        if (!empty($ReserveMeeting) and !empty($ReserveMeeting->linke)) {
+            return Redirect::away($ReserveMeeting->link);
+        }
+
+        abort(403);
     }
 }

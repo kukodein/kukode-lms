@@ -4,21 +4,37 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exports\WebinarsExport;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Panel\WebinarStatisticController;
+use App\Mail\SendNotifications;
+use App\Models\BundleWebinar;
 use App\Models\Category;
+use App\Models\Faq;
+use App\Models\File;
+use App\Models\Group;
+use App\Models\GroupUser;
+use App\Models\Notification;
+use App\Models\Prerequisite;
 use App\Models\Quiz;
 use App\Models\Reward;
 use App\Models\RewardAccounting;
 use App\Models\Role;
+use App\Models\Sale;
+use App\Models\Session;
 use App\Models\SpecialOffer;
 use App\Models\Tag;
+use App\Models\TextLesson;
 use App\Models\Ticket;
 use App\Models\Translation\WebinarTranslation;
+use App\Models\WebinarChapter;
+use App\Models\WebinarChapterItem;
+use App\Models\WebinarExtraDescription;
 use App\Models\WebinarFilterOption;
 use App\Models\WebinarPartnerTeacher;
 use App\User;
 use App\Models\Webinar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Facades\Excel;
 
 class WebinarController extends Controller
@@ -334,11 +350,16 @@ class WebinarController extends Controller
             'timezone' => $data['timezone'] ?? null,
             'duration' => $data['duration'] ?? null,
             'support' => !empty($data['support']) ? true : false,
+            'certificate' => !empty($data['certificate']) ? true : false,
             'downloadable' => !empty($data['downloadable']) ? true : false,
             'partner_instructor' => !empty($data['partner_instructor']) ? true : false,
             'subscribe' => !empty($data['subscribe']) ? true : false,
+            'forum' => !empty($data['forum']) ? true : false,
+            'access_days' => $data['access_days'] ?? null,
             'price' => $data['price'],
+            'points' => $data['points'] ?? null,
             'category_id' => $data['category_id'],
+            'message_for_reviewer' => $data['message_for_reviewer'] ?? null,
             'status' => Webinar::$pending,
             'created_at' => time(),
             'updated_at' => time(),
@@ -402,9 +423,6 @@ class WebinarController extends Controller
                 'tickets',
                 'sessions',
                 'files',
-                'chapters' => function ($query) {
-                    $query->orderBy('order', 'asc');
-                },
                 'faqs',
                 'category' => function ($query) {
                     $query->with(['filters' => function ($query) {
@@ -420,7 +438,16 @@ class WebinarController extends Controller
                     }]);
                 },
                 'tags',
-                'textLessons'
+                'textLessons',
+                'assignments',
+                'chapters' => function ($query) {
+                    $query->orderBy('order', 'asc');
+                    $query->with([
+                        'chapterItems' => function ($query) {
+                            $query->orderBy('order', 'asc');
+                        }
+                    ]);
+                },
             ])
             ->first();
 
@@ -431,7 +458,6 @@ class WebinarController extends Controller
         $locale = $request->get('locale', app()->getLocale());
         storeContentLocale($locale, $webinar->getTable(), $webinar->id);
 
-        $teachers = User::where('role_name', Role::$teacher)->get();
         $categories = Category::where('parent_id', null)
             ->with('subCategories')
             ->get();
@@ -444,7 +470,6 @@ class WebinarController extends Controller
 
         $data = [
             'pageTitle' => trans('admin/main.edit') . ' | ' . $webinar->title,
-            'teachers' => $teachers,
             'categories' => $categories,
             'webinar' => $webinar,
             'webinarCategoryFilters' => $webinar->category->filters,
@@ -455,11 +480,13 @@ class WebinarController extends Controller
             'files' => $webinar->files,
             'textLessons' => $webinar->textLessons,
             'faqs' => $webinar->faqs,
+            'assignments' => $webinar->assignments,
             'teacherQuizzes' => $teacherQuizzes,
             'prerequisites' => $webinar->prerequisites,
             'webinarQuizzes' => $webinar->quizzes,
-            'webinarPartnerTeacher' => $webinar->webinarPartnerTeacher->keyby('teacher_id'),
+            'webinarPartnerTeacher' => $webinar->webinarPartnerTeacher,
             'webinarTags' => $tags,
+            'defaultLocale' => getDefaultLocale(),
         ];
 
         return view('admin.webinars.create', $data);
@@ -530,9 +557,11 @@ class WebinarController extends Controller
 
         $data['private'] = (!empty($data['private']) and $data['private'] == 'on');
         $data['support'] = !empty($data['support']) ? true : false;
+        $data['certificate'] = !empty($data['certificate']) ? true : false;
         $data['downloadable'] = !empty($data['downloadable']) ? true : false;
         $data['partner_instructor'] = !empty($data['partner_instructor']) ? true : false;
         $data['subscribe'] = !empty($data['subscribe']) ? true : false;
+        $data['forum'] = !empty($data['forum']) ? true : false;
 
         if (empty($data['partner_instructor'])) {
             WebinarPartnerTeacher::where('webinar_id', $webinar->id)->delete();
@@ -607,13 +636,17 @@ class WebinarController extends Controller
             'timezone' => $data['timezone'] ?? null,
             'duration' => $data['duration'] ?? null,
             'support' => $data['support'],
+            'certificate' => $data['certificate'],
             'private' => $data['private'],
             'downloadable' => $data['downloadable'],
             'partner_instructor' => $data['partner_instructor'],
             'subscribe' => $data['subscribe'],
+            'forum' => $data['forum'],
+            'access_days' => $data['access_days'] ?? null,
             'price' => $data['price'],
             'category_id' => $data['category_id'],
             'points' => $data['points'] ?? null,
+            'message_for_reviewer' => $data['message_for_reviewer'] ?? null,
             'status' => $data['status'],
             'updated_at' => time(),
         ]);
@@ -694,5 +727,346 @@ class WebinarController extends Controller
         $webinarExport = new WebinarsExport($webinars);
 
         return Excel::download($webinarExport, 'webinars.xlsx');
+    }
+
+    public function studentsLists(Request $request, $id)
+    {
+        $this->authorize('admin_webinar_students_lists');
+
+        $webinar = Webinar::where('id', $id)
+            ->with([
+                'teacher' => function ($qu) {
+                    $qu->select('id', 'full_name');
+                },
+                'chapters' => function ($query) {
+                    $query->where('status', 'active');
+                },
+                'sessions' => function ($query) {
+                    $query->where('status', 'active');
+                },
+                'assignments' => function ($query) {
+                    $query->where('status', 'active');
+                },
+                'quizzes' => function ($query) {
+                    $query->where('status', 'active');
+                },
+                'files' => function ($query) {
+                    $query->where('status', 'active');
+                },
+            ])
+            ->first();
+
+
+        if (!empty($webinar)) {
+
+            $query = User::join('sales', 'sales.buyer_id', 'users.id')
+                ->leftJoin('webinar_reviews', function ($query) use ($webinar) {
+                    $query->on('webinar_reviews.creator_id', 'users.id')
+                        ->where('webinar_reviews.webinar_id', $webinar->id);
+                })
+                ->select('users.*', 'webinar_reviews.rates', DB::raw('sales.created_at as purchase_date'))
+                ->where('sales.webinar_id', $webinar->id)
+                ->whereNull('sales.refund_at');
+
+            $students = $this->studentsListsFilters($webinar, $query, $request)
+                ->orderBy('sales.created_at', 'desc')
+                ->paginate(10);
+
+            $userGroups = Group::where('status', 'active')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            $totalExpireStudents = 0;
+            if (!empty($webinar->access_days)) {
+                $accessTimestamp = $webinar->access_days * 24 * 60 * 60;
+
+                $totalExpireStudents = User::join('sales', 'sales.buyer_id', 'users.id')
+                    ->select('users.*', DB::raw('sales.created_at as purchase_date'))
+                    ->where('sales.webinar_id', $webinar->id)
+                    ->whereRaw('sales.created_at + ? < ?', [$accessTimestamp, time()])
+                    ->whereNull('sales.refund_at')
+                    ->count();
+            }
+
+            $webinarStatisticController = new WebinarStatisticController();
+
+            $allStudentsIds = User::join('sales', 'sales.buyer_id', 'users.id')
+                ->select('users.*', DB::raw('sales.created_at as purchase_date'))
+                ->where('sales.webinar_id', $webinar->id)
+                ->whereNull('sales.refund_at')
+                ->pluck('id')
+                ->toArray();
+
+            $learningPercents = [];
+            foreach ($allStudentsIds as $studentsId) {
+                $learningPercents[$studentsId] = $webinarStatisticController->getCourseProgressForStudent($webinar, $studentsId);
+            }
+
+            foreach ($students as $student) {
+                $student->learning = !empty($learningPercents[$student->id]) ? $learningPercents[$student->id] : 0;
+            }
+
+            $roles = Role::all();
+
+            $data = [
+                'pageTitle' => trans('admin/main.students'),
+                'webinar' => $webinar,
+                'students' => $students,
+                'userGroups' => $userGroups,
+                'roles' => $roles,
+                'totalStudents' => $students->total(),
+                'totalActiveStudents' => $students->total() - $totalExpireStudents,
+                'totalExpireStudents' => $totalExpireStudents,
+                'averageLearning' => count($learningPercents) ? round(array_sum($learningPercents) / count($learningPercents), 2) : 0,
+            ];
+
+            return view('admin.webinars.students', $data);
+        }
+
+        abort(404);
+    }
+
+    private function studentsListsFilters($webinar, $query, $request)
+    {
+        $from = $request->input('from');
+        $to = $request->input('to');
+        $full_name = $request->get('full_name');
+        $sort = $request->get('sort');
+        $group_id = $request->get('group_id');
+        $role_id = $request->get('role_id');
+        $status = $request->get('status');
+
+        $query = fromAndToDateFilter($from, $to, $query, 'sales.created_at');
+
+        if (!empty($full_name)) {
+            $query->where('users.full_name', 'like', "%$full_name%");
+        }
+
+        if (!empty($sort)) {
+            if ($sort == 'rate_asc') {
+                $query->orderBy('webinar_reviews.rates', 'asc');
+            }
+
+            if ($sort == 'rate_desc') {
+                $query->orderBy('webinar_reviews.rates', 'desc');
+            }
+        }
+
+        if (!empty($group_id)) {
+            $userIds = GroupUser::where('group_id', $group_id)->pluck('user_id')->toArray();
+
+            $query->whereIn('users.id', $userIds);
+        }
+
+        if (!empty($role_id)) {
+            $query->where('users.role_id', $role_id);
+        }
+
+        if (!empty($status)) {
+            if ($status == 'expire' and !empty($webinar->access_days)) {
+                $accessTimestamp = $webinar->access_days * 24 * 60 * 60;
+
+                $query->whereRaw('sales.created_at + ? < ?', [$accessTimestamp, time()]);
+            }
+        }
+
+        return $query;
+    }
+
+    public function notificationToStudents($id)
+    {
+        $this->authorize('admin_webinar_notification_to_students');
+
+        $webinar = Webinar::findOrFail($id);
+
+        $data = [
+            'pageTitle' => trans('notification.send_notification'),
+            'webinar' => $webinar
+        ];
+
+        return view('admin.webinars.send-notification-to-course-students', $data);
+    }
+
+
+    public function sendNotificationToStudents(Request $request, $id)
+    {
+        $this->authorize('admin_webinar_notification_to_students');
+
+        $this->validate($request, [
+            'title' => 'required|string',
+            'message' => 'required|string',
+        ]);
+
+        $data = $request->all();
+
+        $webinar = Webinar::where('id', $id)
+            ->with([
+                'sales' => function ($query) {
+                    $query->whereNull('refund_at');
+                    $query->with([
+                        'buyer'
+                    ]);
+                }
+            ])
+            ->first();
+
+        if (!empty($webinar)) {
+            foreach ($webinar->sales as $sale) {
+                if (!empty($sale->buyer)) {
+                    $user = $sale->buyer;
+
+                    Notification::create([
+                        'user_id' => $user->id,
+                        'group_id' => null,
+                        'sender_id' => auth()->id(),
+                        'title' => $data['title'],
+                        'message' => $data['message'],
+                        'sender' => Notification::$AdminSender,
+                        'type' => 'single',
+                        'created_at' => time()
+                    ]);
+
+                    if (!empty($user->email) and env('APP_ENV') == 'production') {
+                        \Mail::to($user->email)->send(new SendNotifications(['title' => $data['title'], 'message' => $data['message']]));
+                    }
+                }
+            }
+
+            $toastData = [
+                'title' => trans('public.request_success'),
+                'msg' => trans('update.the_notification_was_successfully_sent_to_n_students', ['count' => count($webinar->sales)]),
+                'status' => 'success'
+            ];
+
+            return redirect("/admin/webinars/{$webinar->id}/students")->with(['toast' => $toastData]);
+        }
+
+        abort(404);
+    }
+
+    public function orderItems(Request $request)
+    {
+        $this->authorize('admin_webinars_edit');
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'items' => 'required',
+            'table' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response([
+                'code' => 422,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $tableName = $data['table'];
+        $itemIds = explode(',', $data['items']);
+
+        if (!is_array($itemIds) and !empty($itemIds)) {
+            $itemIds = [$itemIds];
+        }
+
+        if (!empty($itemIds) and is_array($itemIds) and count($itemIds)) {
+            switch ($tableName) {
+                case 'tickets':
+                    foreach ($itemIds as $order => $id) {
+                        Ticket::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                    break;
+                case 'sessions':
+                    foreach ($itemIds as $order => $id) {
+                        Session::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                    break;
+                case 'files':
+                    foreach ($itemIds as $order => $id) {
+                        File::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                    break;
+                case 'text_lessons':
+                    foreach ($itemIds as $order => $id) {
+                        TextLesson::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                    break;
+                case 'webinar_chapters':
+                    foreach ($itemIds as $order => $id) {
+                        WebinarChapter::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                    break;
+                case 'webinar_chapter_items':
+                    foreach ($itemIds as $order => $id) {
+                        WebinarChapterItem::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                case 'bundle_webinars':
+                    foreach ($itemIds as $order => $id) {
+                        BundleWebinar::where('id', $id)
+                            ->update(['order' => ($order + 1)]);
+                    }
+                    break;
+            }
+        }
+
+        return response()->json([
+            'title' => trans('public.request_success'),
+            'msg' => trans('update.items_sorted_successful')
+        ]);
+    }
+
+
+    public function getContentItemByLocale(Request $request, $id)
+    {
+        $this->authorize('admin_webinars_edit');
+
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'item_id' => 'required',
+            'locale' => 'required',
+            'relation' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response([
+                'code' => 422,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $webinar = Webinar::where('id', $id)->first();
+
+        if (!empty($webinar)) {
+
+            $itemId = $data['item_id'];
+            $locale = $data['locale'];
+            $relation = $data['relation'];
+
+            if (!empty($webinar->$relation)) {
+                $item = $webinar->$relation->where('id', $itemId)->first();
+
+                if (!empty($item)) {
+                    foreach ($item->translatedAttributes as $attribute) {
+                        try {
+                            $item->$attribute = $item->translate(mb_strtolower($locale))->$attribute;
+                        } catch (\Exception $e) {
+                            $item->$attribute = null;
+                        }
+                    }
+
+                    return response()->json([
+                        'item' => $item
+                    ], 200);
+                }
+            }
+        }
+
+        abort(403);
     }
 }

@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\AdvertisingBanner;
 use App\Models\Blog;
+use App\Models\Bundle;
 use App\Models\FeatureWebinar;
+use App\Models\HomeSection;
+use App\Models\Product;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\SpecialOffer;
@@ -22,32 +25,36 @@ class HomeController extends Controller
 {
     public function index()
     {
-        $homeSectionsSettings = getHomeSectionsSettings();
+        $homeSections = HomeSection::orderBy('order', 'asc')->get();
+        $selectedSectionsName = $homeSections->pluck('name')->toArray();
 
-        $featureWebinars = FeatureWebinar::whereIn('page', ['home', 'home_categories'])
-            ->where('status', 'publish')
-            ->whereHas('webinar', function ($query) {
-                $query->where('status', Webinar::$active);
-            })
-            ->with([
-                'webinar' => function ($query) {
-                    $query->with([
-                        'teacher' => function ($qu) {
-                            $qu->select('id', 'full_name', 'avatar');
-                        },
-                        'reviews' => function ($query) {
-                            $query->where('status', 'active');
-                        },
-                        'tickets',
-                        'feature'
-                    ]);
-                }
-            ])
-            ->orderBy('updated_at', 'desc')
-            ->get();
-        //$selectedWebinarIds = $featureWebinars->pluck('id')->toArray();
+        $featureWebinars = null;
+        if (in_array(HomeSection::$featured_classes, $selectedSectionsName)) {
+            $featureWebinars = FeatureWebinar::whereIn('page', ['home', 'home_categories'])
+                ->where('status', 'publish')
+                ->whereHas('webinar', function ($query) {
+                    $query->where('status', Webinar::$active);
+                })
+                ->with([
+                    'webinar' => function ($query) {
+                        $query->with([
+                            'teacher' => function ($qu) {
+                                $qu->select('id', 'full_name', 'avatar');
+                            },
+                            'reviews' => function ($query) {
+                                $query->where('status', 'active');
+                            },
+                            'tickets',
+                            'feature'
+                        ]);
+                    }
+                ])
+                ->orderBy('updated_at', 'desc')
+                ->get();
+            //$selectedWebinarIds = $featureWebinars->pluck('id')->toArray();
+        }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['latest_classes']) and $homeSectionsSettings['latest_classes']) {
+        if (in_array(HomeSection::$latest_classes, $selectedSectionsName)) {
             $latestWebinars = Webinar::where('status', Webinar::$active)
                 ->where('private', false)
                 ->orderBy('updated_at', 'desc')
@@ -67,7 +74,23 @@ class HomeController extends Controller
             //$selectedWebinarIds = array_merge($selectedWebinarIds, $latestWebinars->pluck('id')->toArray());
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['best_sellers']) and $homeSectionsSettings['best_sellers']) {
+        if (in_array(HomeSection::$latest_bundles, $selectedSectionsName)) {
+            $latestBundles = Bundle::where('status', Webinar::$active)
+                ->orderBy('updated_at', 'desc')
+                ->with([
+                    'teacher' => function ($qu) {
+                        $qu->select('id', 'full_name', 'avatar');
+                    },
+                    'reviews' => function ($query) {
+                        $query->where('status', 'active');
+                    },
+                    'tickets',
+                ])
+                ->limit(6)
+                ->get();
+        }
+
+        if (in_array(HomeSection::$best_sellers, $selectedSectionsName)) {
             $bestSaleWebinarsIds = Sale::whereNotNull('webinar_id')
                 ->select(DB::raw('COUNT(id) as cnt,webinar_id'))
                 ->groupBy('webinar_id')
@@ -95,7 +118,7 @@ class HomeController extends Controller
             //$selectedWebinarIds = array_merge($selectedWebinarIds, $bestSaleWebinars->pluck('id')->toArray());
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['best_rates']) and $homeSectionsSettings['best_rates']) {
+        if (in_array(HomeSection::$best_rates, $selectedSectionsName)) {
             $bestRateWebinars = Webinar::join('webinar_reviews', 'webinars.id', '=', 'webinar_reviews.webinar_id')
                 ->select('webinars.*', 'webinar_reviews.rates', 'webinar_reviews.status', DB::raw('avg(rates) as avg_rates'))
                 ->where('webinars.status', 'active')
@@ -113,7 +136,7 @@ class HomeController extends Controller
         }
 
         // hasDiscountWebinars
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['discount_classes']) and $homeSectionsSettings['discount_classes']) {
+        if (in_array(HomeSection::$discount_classes, $selectedSectionsName)) {
             $now = time();
             $webinarIdsHasDiscount = [];
 
@@ -154,7 +177,7 @@ class HomeController extends Controller
         }
         // .\ hasDiscountWebinars
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['free_classes']) and $homeSectionsSettings['free_classes']) {
+        if (in_array(HomeSection::$free_classes, $selectedSectionsName)) {
             $freeWebinars = Webinar::where('status', Webinar::$active)
                 ->where('private', false)
                 ->where(function ($query) {
@@ -176,7 +199,19 @@ class HomeController extends Controller
                 ->get();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['trend_categories']) and $homeSectionsSettings['trend_categories']) {
+        if (in_array(HomeSection::$store_products, $selectedSectionsName)) {
+            $newProducts = Product::where('status', Product::$active)
+                ->orderBy('updated_at', 'desc')
+                ->with([
+                    'creator' => function ($qu) {
+                        $qu->select('id', 'full_name', 'avatar');
+                    },
+                ])
+                ->limit(6)
+                ->get();
+        }
+
+        if (in_array(HomeSection::$trend_categories, $selectedSectionsName)) {
             $trendCategories = TrendCategory::with([
                 'category' => function ($query) {
                     $query->withCount([
@@ -190,7 +225,7 @@ class HomeController extends Controller
                 ->get();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['blog']) and $homeSectionsSettings['blog']) {
+        if (in_array(HomeSection::$blog, $selectedSectionsName)) {
             $blog = Blog::where('status', 'publish')
                 ->with(['category', 'author' => function ($query) {
                     $query->select('id', 'full_name');
@@ -201,7 +236,7 @@ class HomeController extends Controller
                 ->get();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['instructors']) and $homeSectionsSettings['instructors']) {
+        if (in_array(HomeSection::$instructors, $selectedSectionsName)) {
             $instructors = User::where('role_name', Role::$teacher)
                 ->select('id', 'full_name', 'avatar', 'bio')
                 ->where('status', 'active')
@@ -216,7 +251,7 @@ class HomeController extends Controller
                 ->get();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['organizations']) and $homeSectionsSettings['organizations']) {
+        if (in_array(HomeSection::$organizations, $selectedSectionsName)) {
             $organizations = User::where('role_name', Role::$organization)
                 ->where('status', 'active')
                 ->where(function ($query) {
@@ -232,27 +267,30 @@ class HomeController extends Controller
                 ->get();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['testimonials']) and $homeSectionsSettings['testimonials']) {
+        if (in_array(HomeSection::$testimonials, $selectedSectionsName)) {
             $testimonials = Testimonial::where('status', 'active')->get();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['subscribes']) and $homeSectionsSettings['subscribes']) {
+        if (in_array(HomeSection::$subscribes, $selectedSectionsName)) {
             $subscribes = Subscribe::all();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['find_instructors']) and $homeSectionsSettings['find_instructors']) {
+        if (in_array(HomeSection::$find_instructors, $selectedSectionsName)) {
             $findInstructorSection = getFindInstructorsSettings();
         }
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['reward_program']) and $homeSectionsSettings['reward_program']) {
+        if (in_array(HomeSection::$reward_program, $selectedSectionsName)) {
             $rewardProgramSection = getRewardProgramSettings();
         }
 
 
-        $showBecomeInstructorSection = (!empty(getRegistrationPackagesGeneralSettings('enable_home_section')) and getRegistrationPackagesGeneralSettings('enable_home_section'));
-
-        if ($showBecomeInstructorSection) {
+        if (in_array(HomeSection::$become_instructor, $selectedSectionsName)) {
             $becomeInstructorSection = getBecomeInstructorSectionSettings();
+        }
+
+
+        if (in_array(HomeSection::$forum_section, $selectedSectionsName)) {
+            $forumSection = getForumSectionSettings();
         }
 
         $advertisingBanners = AdvertisingBanner::where('published', true)
@@ -293,7 +331,7 @@ class HomeController extends Controller
         $heroSection = (!empty($siteGeneralSettings['hero_section2']) and $siteGeneralSettings['hero_section2'] == "1") ? "2" : "1";
         $heroSectionData = getHomeHeroSettings($heroSection);
 
-        if (!empty($homeSectionsSettings) and !empty($homeSectionsSettings['video_or_image_section']) and $homeSectionsSettings['video_or_image_section']) {
+        if (in_array(HomeSection::$video_or_image_section, $selectedSectionsName)) {
             $boxVideoOrImage = getHomeVideoOrImageBoxSettings();
         }
 
@@ -308,12 +346,15 @@ class HomeController extends Controller
             'pageRobot' => $pageRobot,
             'heroSection' => $heroSection,
             'heroSectionData' => $heroSectionData,
+            'homeSections' => $homeSections,
             'featureWebinars' => $featureWebinars,
             'latestWebinars' => $latestWebinars ?? [],
+            'latestBundles' => $latestBundles ?? [],
             'bestSaleWebinars' => $bestSaleWebinars ?? [],
             'hasDiscountWebinars' => $hasDiscountWebinars ?? [],
             'bestRateWebinars' => $bestRateWebinars ?? [],
             'freeWebinars' => $freeWebinars ?? [],
+            'newProducts' => $newProducts ?? [],
             'trendCategories' => $trendCategories ?? [],
             'instructors' => $instructors ?? [],
             'testimonials' => $testimonials ?? [],
@@ -330,6 +371,7 @@ class HomeController extends Controller
             'findInstructorSection' => $findInstructorSection ?? null,
             'rewardProgramSection' => $rewardProgramSection ?? null,
             'becomeInstructorSection' => $becomeInstructorSection ?? null,
+            'forumSection' => $forumSection ?? null,
         ];
 
         return view(getTemplate() . '.pages.home', $data);

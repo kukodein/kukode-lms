@@ -14,7 +14,9 @@ class Badge extends Model implements TranslatableContract
     protected $guarded = ['id'];
     public $timestamps = false;
 
-    static $badgeTypes = ['register_date', 'course_count', 'course_rate', 'sale_count', 'support_rate'];
+    static $badgeTypes = ['register_date', 'course_count', 'course_rate', 'sale_count', 'support_rate',
+        'product_sale_count', 'make_topic', 'send_post_in_topic', 'instructor_blog'
+    ];
 
     public $translatedAttributes = ['title', 'description'];
 
@@ -31,7 +33,7 @@ class Badge extends Model implements TranslatableContract
     static function getUserBadges($user, $customBadges = false, $getNext = false)
     {
         $earnedBadges = [];
-        $nextBadges = [];
+        $nextBadges = []; // for normal user just register_date and for instructor and organization just sale_count
         $nextBadge = null;
         $badges = self::all();
         $badges = $badges->groupBy('type');
@@ -87,7 +89,7 @@ class Badge extends Model implements TranslatableContract
 
                         break;
 
-                    case'sale_count':
+                    case 'sale_count':
                         if (!empty($courses) and !$courses->isEmpty()) {
                             $saleCount = $user->salesCount();
 
@@ -105,7 +107,7 @@ class Badge extends Model implements TranslatableContract
                         }
                         break;
 
-                    case'support_rate':
+                    case 'support_rate':
                         if (!empty($courses) and !$courses->isEmpty()) {
                             $webinarIds = $courses->pluck('id')->toArray();
 
@@ -116,6 +118,59 @@ class Badge extends Model implements TranslatableContract
                             $supportBadges = self::handleCondition($badges[$type], $supportsRate);
                             if (!empty($supportBadges['result'])) {
                                 $earnedBadges[] = $supportBadges['result'];
+                            }
+                        }
+                        break;
+
+                    case 'product_sale_count':
+                        $products = $user->products;
+
+                        if (!empty($products) and !$products->isEmpty()) {
+                            $saleCount = $user->productsSalesCount();
+
+                            $productsSaleBadges = self::handleCondition($badges[$type], $saleCount);
+
+                            if (!empty($productsSaleBadges['result'])) {
+                                $earnedBadges[] = $productsSaleBadges['result'];
+                            }
+                        }
+                        break;
+
+                    case 'make_topic':
+                        $forumTopics = $user->forumTopics;
+
+                        if (!empty($forumTopics) and !$forumTopics->isEmpty()) {
+
+                            $forumTopicsBadges = self::handleCondition($badges[$type], $forumTopics->count());
+
+                            if (!empty($forumTopicsBadges['result'])) {
+                                $earnedBadges[] = $forumTopicsBadges['result'];
+                            }
+                        }
+                        break;
+
+                    case 'send_post_in_topic':
+                        $forumTopicPosts = $user->forumTopicPosts;
+
+                        if (!empty($forumTopicPosts) and !$forumTopicPosts->isEmpty()) {
+
+                            $forumTopicPostsBadges = self::handleCondition($badges[$type], $forumTopicPosts->count());
+
+                            if (!empty($forumTopicPostsBadges['result'])) {
+                                $earnedBadges[] = $forumTopicPostsBadges['result'];
+                            }
+                        }
+                        break;
+
+                    case 'instructor_blog':
+                        $blogCount = $user->blog()->where('status', 'publish')->count();
+
+                        if ($blogCount) {
+
+                            $blogBadges = self::handleCondition($badges[$type], $blogCount);
+
+                            if (!empty($blogBadges['result'])) {
+                                $earnedBadges[] = $blogBadges['result'];
                             }
                         }
                         break;

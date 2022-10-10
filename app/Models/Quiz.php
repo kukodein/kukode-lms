@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\SequenceContent;
 use Illuminate\Database\Eloquent\Model;
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
 use Astrotomic\Translatable\Translatable;
@@ -9,6 +10,7 @@ use Astrotomic\Translatable\Translatable;
 class Quiz extends Model implements TranslatableContract
 {
     use Translatable;
+    use SequenceContent;
 
     const ACTIVE = 'active';
     const INACTIVE = 'inactive';
@@ -53,6 +55,11 @@ class Quiz extends Model implements TranslatableContract
     public function certificates()
     {
         return $this->hasMany('App\Models\Certificate', 'quiz_id', 'id');
+    }
+
+    public function chapter()
+    {
+        return $this->belongsTo('App\Models\WebinarChapter', 'chapter_id', 'id');
     }
 
 

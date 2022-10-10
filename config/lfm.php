@@ -64,6 +64,7 @@ return [
                 '.doc',
                 '.docx',
                 '.ppt',
+                '.pptx',
                 '.jpeg',
                 '.jpg',
                 '.png',
@@ -73,6 +74,11 @@ return [
                 '.mkv',
                 '.avi',
                 '.mp3',
+                '.woff',
+                '.woff2',
+                '.ttf',
+                '.eot',
+                '.svg',
             ],
         ],
         'image' => [
@@ -84,6 +90,7 @@ return [
                 '.doc',
                 '.docx',
                 '.ppt',
+                '.pptx',
                 '.jpeg',
                 '.jpg',
                 '.png',
@@ -93,6 +100,11 @@ return [
                 '.mkv',
                 '.avi',
                 '.mp3',
+                '.woff',
+                '.woff2',
+                '.ttf',
+                '.eot',
+                '.svg',
             ],
         ],
     ],
@@ -183,6 +195,6 @@ return [
     | directives are not supported.
      */
     'php_ini_overrides' => [
-        'memory_limit' => '256M',
+        'memory_limit' => '512M',
     ],
 ];

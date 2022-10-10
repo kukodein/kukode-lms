@@ -29,6 +29,11 @@ class Accounting extends Model
         return $this->belongsTo('App\Models\Webinar', 'webinar_id', 'id');
     }
 
+    public function bundle()
+    {
+        return $this->belongsTo('App\Models\Bundle', 'bundle_id', 'id');
+    }
+
     public function user()
     {
         return $this->belongsTo('App\User', 'user_id', 'id');
@@ -59,6 +64,11 @@ class Accounting extends Model
         return $this->belongsTo('App\Models\MeetingTime', 'meeting_time_id', 'id');
     }
 
+    public function product()
+    {
+        return $this->belongsTo('App\Models\Product', 'product_id', 'id');
+    }
+
 
     public static function createAccounting($orderItem, $type = null)
     {
@@ -82,10 +92,12 @@ class Accounting extends Model
                 'user_id' => $orderItem->user_id,
                 'amount' => $orderItem->total_amount,
                 'webinar_id' => !empty($orderItem->webinar_id) ? $orderItem->webinar_id : null,
+                'bundle_id' => !empty($orderItem->bundle_id) ? $orderItem->bundle_id : null,
                 'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
                 'subscribe_id' => $orderItem->subscribe_id ?? null,
                 'promotion_id' => $orderItem->promotion_id ?? null,
                 'registration_package_id' => $orderItem->registration_package_id ?? null,
+                'product_id' => $orderItem->product_id ?? null,
                 'type' => Accounting::$addiction,
                 'type_account' => Accounting::$asset,
                 'description' => trans('public.paid_for_sale'),
@@ -108,10 +120,12 @@ class Accounting extends Model
             'user_id' => $orderItem->user_id,
             'amount' => $orderItem->total_amount,
             'webinar_id' => !empty($orderItem->webinar_id) ? $orderItem->webinar_id : null,
+            'bundle_id' => !empty($orderItem->bundle_id) ? $orderItem->bundle_id : null,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
             'registration_package_id' => $orderItem->registration_package_id ?? null,
+            'product_id' => $orderItem->product_id ?? null,
             'type' => Accounting::$deduction,
             'type_account' => Accounting::$asset,
             'description' => $deductionDescription,
@@ -125,8 +139,12 @@ class Accounting extends Model
 
         if (!empty($orderItem->webinar_id)) {
             $notifyOptions['[c.title]'] = $orderItem->webinar->title;
+        } elseif (!empty($orderItem->bundle_id)) {
+            $notifyOptions['[c.title]'] = $orderItem->bundle->title;
         } elseif (!empty($orderItem->reserve_meeting_id)) {
             $notifyOptions['[c.title]'] = trans('meeting.reservation_appointment');
+        } elseif (!empty($orderItem->product_id)) {
+            $notifyOptions['[c.title]'] = $orderItem->product->title;
         }
 
         sendNotification('new_financial_document', $notifyOptions, $orderItem->user_id);
@@ -139,10 +157,12 @@ class Accounting extends Model
             'tax' => true,
             'amount' => $orderItem->tax_price,
             'webinar_id' => $orderItem->webinar_id,
+            'bundle_id' => $orderItem->bundle_id,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
             'registration_package_id' => $orderItem->registration_package_id ?? null,
+            'product_id' => $orderItem->product_id ?? null,
             'type_account' => Accounting::$asset,
             'type' => Accounting::$addiction,
             'description' => trans('public.tax_get_form_buyer'),
@@ -154,13 +174,17 @@ class Accounting extends Model
 
     public static function createAccountingSeller($orderItem)
     {
+        $sellerId = OrderItem::getSeller($orderItem);
+
         Accounting::create([
-            'user_id' => $orderItem->webinar_id ? $orderItem->webinar->creator_id : (!empty($orderItem->reserve_meeting_id) ? $orderItem->reserveMeeting->meeting->creator_id : 1),
+            'user_id' => $sellerId,
             'amount' => $orderItem->total_amount - $orderItem->tax_price - $orderItem->commission_price,
             'webinar_id' => $orderItem->webinar_id,
+            'bundle_id' => $orderItem->bundle_id,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
+            'product_id' => $orderItem->product_id ?? null,
             'type_account' => Accounting::$income,
             'type' => Accounting::$addiction,
             'description' => trans('public.income_sale'),
@@ -189,7 +213,7 @@ class Accounting extends Model
     public static function createAccountingCommission($orderItem)
     {
         $authId = auth()->id();
-        $sellerId = $orderItem->webinar_id ? $orderItem->webinar->creator_id : (!empty($orderItem->reserve_meeting_id) ? $orderItem->reserveMeeting->meeting->creator_id : null);
+        $sellerId = OrderItem::getSeller($orderItem);
 
         $commissionPrice = $orderItem->commission_price;
         $affiliateCommissionPrice = 0;
@@ -207,13 +231,26 @@ class Accounting extends Model
 
                 if (!empty($affiliateUser) and $affiliateUser->affiliate) {
 
-                    if (!empty($affiliate) and !empty($referralSettings['affiliate_user_commission'])) {
-                        $affiliateCommission = $referralSettings['affiliate_user_commission'];
+                    if (!empty($affiliate)) {
+                        if (!empty($orderItem->product_id) and !empty($referralSettings['store_affiliate_user_commission']) and $referralSettings['store_affiliate_user_commission'] > 0) {
+                            $affiliateCommission = $referralSettings['store_affiliate_user_commission'];
 
-                        $commission = $affiliateUser->getCommission();
+                            $commission = $affiliateUser->getCommission();
 
-                        $affiliateCommissionPrice = ($affiliateCommission * $commissionPrice) / $commission;
-                        $commissionPrice = $commissionPrice - $affiliateCommissionPrice;
+                            if ($commission > 0) {
+                                $affiliateCommissionPrice = ($affiliateCommission * $commissionPrice) / $commission;
+                                $commissionPrice = $commissionPrice - $affiliateCommissionPrice;
+                            }
+                        } elseif (empty($orderItem->product_id) and !empty($referralSettings['affiliate_user_commission']) and $referralSettings['affiliate_user_commission'] > 0) {
+                            $affiliateCommission = $referralSettings['affiliate_user_commission'];
+
+                            $commission = $affiliateUser->getCommission();
+
+                            if ($commission > 0) {
+                                $affiliateCommissionPrice = ($affiliateCommission * $commissionPrice) / $commission;
+                                $commissionPrice = $commissionPrice - $affiliateCommissionPrice;
+                            }
+                        }
                     }
                 }
             }
@@ -224,6 +261,8 @@ class Accounting extends Model
             'system' => true,
             'amount' => $commissionPrice,
             'webinar_id' => $orderItem->webinar_id ?? null,
+            'bundle_id' => $orderItem->bundle_id ?? null,
+            'product_id' => $orderItem->product_id ?? null,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
@@ -241,6 +280,8 @@ class Accounting extends Model
                 'is_affiliate_commission' => true,
                 'amount' => $affiliateCommissionPrice,
                 'webinar_id' => $orderItem->webinar_id ?? null,
+                'bundle_id' => $orderItem->bundle_id ?? null,
+                'product_id' => $orderItem->product_id ?? null,
                 'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
                 'subscribe_id' => null,
                 'promotion_id' => null,
@@ -264,6 +305,7 @@ class Accounting extends Model
                 'system' => false,
                 'amount' => $amount,
                 'webinar_id' => null,
+                'bundle_id' => null,
                 'meeting_time_id' => null,
                 'subscribe_id' => null,
                 'promotion_id' => null,
@@ -280,6 +322,7 @@ class Accounting extends Model
                 'system' => true,
                 'amount' => $amount,
                 'webinar_id' => null,
+                'bundle_id' => null,
                 'meeting_time_id' => null,
                 'subscribe_id' => null,
                 'promotion_id' => null,
@@ -292,20 +335,21 @@ class Accounting extends Model
     }
 
 
-    public static function refundAccounting(Order $order)
+    public static function refundAccounting(Order $order, $productOrderId = null)
     {
         foreach ($order->orderItems as $orderItem) {
+            if (empty($productOrderId) or ($orderItem->product_order_id == $productOrderId)) {
+                self::refundAccountingBuyer($orderItem);
 
-            self::refundAccountingBuyer($orderItem);
+                if ($orderItem->tax_price) {
+                    self::refundAccountingTax($orderItem);
+                }
 
-            if ($orderItem->tax_price) {
-                self::refundAccountingTax($orderItem);
-            }
+                self::refundAccountingSeller($orderItem);
 
-            self::refundAccountingSeller($orderItem);
-
-            if ($orderItem->commission_price) {
-                self::refundAccountingCommission($orderItem);
+                if ($orderItem->commission_price) {
+                    self::refundAccountingCommission($orderItem);
+                }
             }
         }
     }
@@ -316,6 +360,7 @@ class Accounting extends Model
             'user_id' => $orderItem->user_id,
             'amount' => $orderItem->total_amount,
             'webinar_id' => $orderItem->webinar_id,
+            'bundle_id' => $orderItem->bundle_id,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
@@ -334,6 +379,7 @@ class Accounting extends Model
             'tax' => true,
             'amount' => $orderItem->tax_price,
             'webinar_id' => $orderItem->webinar_id,
+            'bundle_id' => $orderItem->bundle_id,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
@@ -348,11 +394,15 @@ class Accounting extends Model
 
     public static function refundAccountingCommission($orderItem)
     {
+        $sellerId = OrderItem::getSeller($orderItem);
+
         if (!empty($orderItem->commission_price)) {
             Accounting::create([
-                'user_id' => $orderItem->webinar_id ? $orderItem->webinar->creator_id : (!empty($orderItem->reserve_meeting_id) ? $orderItem->reserveMeeting->meeting->creator_id : 1),
+                'user_id' => $sellerId,
                 'amount' => $orderItem->commission_price,
                 'webinar_id' => $orderItem->webinar_id,
+                'bundle_id' => $orderItem->bundle_id,
+                'product_id' => $orderItem->product_id,
                 'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
                 'subscribe_id' => $orderItem->subscribe_id ?? null,
                 'promotion_id' => $orderItem->promotion_id ?? null,
@@ -363,10 +413,12 @@ class Accounting extends Model
             ]);
 
             Accounting::create([
-                'user_id' => !empty($orderItem->webinar_id) ? $orderItem->webinar->creator_id : (!empty($orderItem->reserve_meeting_id) ? $orderItem->reserveMeeting->meeting->creator_id : 1),
+                'user_id' => $sellerId,
                 'system' => true,
                 'amount' => $orderItem->commission_price,
                 'webinar_id' => $orderItem->webinar_id,
+                'bundle_id' => $orderItem->bundle_id,
+                'product_id' => $orderItem->product_id,
                 'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
                 'subscribe_id' => $orderItem->subscribe_id ?? null,
                 'promotion_id' => $orderItem->promotion_id ?? null,
@@ -382,10 +434,14 @@ class Accounting extends Model
 
     public static function refundAccountingSeller($orderItem)
     {
+        $sellerId = OrderItem::getSeller($orderItem);
+
         Accounting::create([
-            'user_id' => !empty($orderItem->webinar_id) ? $orderItem->webinar->creator_id : (!empty($orderItem->reserve_meeting_id) ? $orderItem->reserveMeeting->meeting->creator_id : 1),
+            'user_id' => $sellerId,
             'amount' => $orderItem->total_amount - $orderItem->tax_price,
             'webinar_id' => $orderItem->webinar_id,
+            'bundle_id' => $orderItem->bundle_id,
+            'product_id' => $orderItem->product_id,
             'meeting_time_id' => $orderItem->reserveMeeting ? $orderItem->reserveMeeting->meeting_time_id : null,
             'subscribe_id' => $orderItem->subscribe_id ?? null,
             'promotion_id' => $orderItem->promotion_id ?? null,
@@ -494,7 +550,7 @@ class Accounting extends Model
         ]);
     }
 
-    public static function createAccountingForSaleWithSubscribe($webinar, $subscribe)
+    public static function createAccountingForSaleWithSubscribe($item, $subscribe,$itemName)
     {
         $admin = User::getAdmin();
 
@@ -507,9 +563,9 @@ class Accounting extends Model
         $totalAmount = $pricePerSubscribe - $commissionPrice;
 
         Accounting::create([
-            'user_id' => $webinar->creator_id,
+            'user_id' => $item->creator_id,
             'amount' => $totalAmount,
-            'webinar_id' => $webinar->id,
+            $itemName => $item->id,
             'type' => Accounting::$addiction,
             'type_account' => Accounting::$income,
             'description' => trans('public.paid_form_subscribe'),
@@ -520,7 +576,7 @@ class Accounting extends Model
             'system' => true,
             'user_id' => $admin->id,
             'amount' => $totalAmount,
-            'webinar_id' => $webinar->id,
+            $itemName => $item->id,
             'type' => Accounting::$deduction,
             'type_account' => Accounting::$asset,
             'description' => trans('public.paid_form_subscribe'),

@@ -59,11 +59,8 @@ class Channel implements IChannel
             } elseif ($transaction->pending()) {
                 $order->update(['status' => Order::$pending]);
             }
-
-            return $order;
-
         }
 
-        abort(404);
+        return $order;
     }
 }

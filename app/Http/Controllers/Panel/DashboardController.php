@@ -28,9 +28,10 @@ class DashboardController extends Controller
 
         if (!$user->isUser()) {
             $meetingIds = Meeting::where('creator_id', $user->id)->pluck('id')->toArray();
-            $liveRequests = ReserveMeeting::whereIn('meeting_id', $meetingIds)
+            $pendingAppointments = ReserveMeeting::whereIn('meeting_id', $meetingIds)
+                ->whereHas('sale')
                 ->where('status', ReserveMeeting::$pending)
-                ->get();
+                ->count();
 
             $userWebinarsIds = $user->webinars->pluck('id')->toArray();
             $supports = Support::whereIn('webinar_id', $userWebinarsIds)->where('status', 'open')->get();
@@ -49,7 +50,7 @@ class DashboardController extends Controller
                 ->whereBetween('created_at', [$firstDayMonth, $lastDayMonth])
                 ->get();
 
-            $data['pendingAppointments'] = count($liveRequests);
+            $data['pendingAppointments'] = $pendingAppointments;
             $data['supportsCount'] = count($supports);
             $data['commentsCount'] = count($comments);
             $data['monthlySalesCount'] = count($monthlySales) ? $monthlySales->sum('total_amount') : 0;
@@ -62,6 +63,7 @@ class DashboardController extends Controller
                 ->get();
 
             $reserveMeetings = ReserveMeeting::where('user_id', $user->id)
+                ->whereHas('sale')
                 ->where('status', ReserveMeeting::$open)
                 ->get();
 

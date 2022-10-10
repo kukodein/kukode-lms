@@ -63,6 +63,7 @@ class RewardAccounting extends Model
             switch ($reward->type) {
                 case Reward::BUY:
                 case Reward::ACCOUNT_CHARGE:
+                case Reward::BUY_STORE_PRODUCT:
                     if (!empty($extra)) { // for this type $extra is amount
                         $score = $reward->score * ($extra / $reward->condition);
                     }
