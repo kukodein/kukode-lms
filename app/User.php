@@ -5,11 +5,16 @@ namespace App;
 use App\Bitwise\UserLevelOfTraining;
 use App\Models\Accounting;
 use App\Models\Badge;
+use App\Models\ForumTopic;
+use App\Models\ForumTopicLike;
+use App\Models\ForumTopicPost;
 use App\Models\Meeting;
 use App\Models\Noticeboard;
 use App\Models\Notification;
 use App\Models\Permission;
+use App\Models\ProductOrder;
 use App\Models\QuizzesResult;
+use App\Models\Region;
 use App\Models\ReserveMeeting;
 use App\Models\RewardAccounting;
 use App\Models\Role;
@@ -20,9 +25,8 @@ use App\Models\Webinar;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
-use Tymon\JWTAuth\Contracts\JWTSubject;
 
-class User extends Authenticatable implements JWTSubject
+class User extends Authenticatable
 {
     use Notifiable;
 
@@ -107,15 +111,15 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo('App\Models\Role', 'role_id', 'id');
     }
 
-    public function getAvatar()
+    public function getAvatar($size = 40)
     {
         if (!empty($this->avatar)) {
-            $imgUrl = $this->avatar;
+            $avatarUrl = $this->avatar;
         } else {
-            $imgUrl = getPageBackgroundSettings('user_avatar');
+            $avatarUrl = "/getDefaultAvatar?item={$this->id}&name={$this->full_name}&size=$size";
         }
 
-        return $imgUrl;
+        return $avatarUrl;
     }
 
     public function getCover()
@@ -217,6 +221,36 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany('App\Models\Webinar', 'creator_id', 'id')
             ->orWhere('teacher_id', $this->id);
+    }
+
+    public function products()
+    {
+        return $this->hasMany('App\Models\Product', 'creator_id', 'id');
+    }
+
+    public function productOrdersAsBuyer()
+    {
+        return $this->hasMany('App\Models\ProductOrder', 'buyer_id', 'id');
+    }
+
+    public function productOrdersAsSeller()
+    {
+        return $this->hasMany('App\Models\ProductOrder', 'seller_id', 'id');
+    }
+
+    public function forumTopics()
+    {
+        return $this->hasMany('App\Models\ForumTopic', 'creator_id', 'id');
+    }
+
+    public function forumTopicPosts()
+    {
+        return $this->hasMany('App\Models\ForumTopicPost', 'user_id', 'id');
+    }
+
+    public function blog()
+    {
+        return $this->hasMany('App\Models\Blog', 'author_id', 'id');
     }
 
     public function getActiveWebinars($just_count = false)
@@ -445,6 +479,7 @@ class User extends Authenticatable implements JWTSubject
     public function getSaleAmounts()
     {
         return Sale::where('seller_id', $this->id)
+            ->whereNull('refund_at')
             ->sum('amount');
     }
 
@@ -457,9 +492,20 @@ class User extends Authenticatable implements JWTSubject
 
     public function salesCount()
     {
-        $webinarIds = $this->webinars()->pluck('id')->toArray();
+        return Sale::where('seller_id', $this->id)
+            ->whereNotNull('webinar_id')
+            ->where('type', 'webinar')
+            ->whereNull('refund_at')
+            ->count();
+    }
 
-        return Sale::whereIn('webinar_id', $webinarIds)->count();
+    public function productsSalesCount()
+    {
+        return Sale::where('seller_id', $this->id)
+            ->whereNotNull('product_order_id')
+            ->where('type', 'product')
+            ->whereNull('refund_at')
+            ->count();
     }
 
     public function getUnReadNotifications()
@@ -533,6 +579,11 @@ class User extends Authenticatable implements JWTSubject
 
     public function getUnreadNoticeboards()
     {
+        $purchasedCoursesIds = $this->getPurchasedCoursesIds();
+        $purchasedCoursesInstructorsIds = Webinar::whereIn('id', $purchasedCoursesIds)
+            ->pluck('teacher_id')
+            ->toArray();
+
         $noticeboards = Noticeboard::where(function ($query) {
             $query->whereNotNull('organ_id')
                 ->where('organ_id', $this->organ_id)
@@ -561,8 +612,15 @@ class User extends Authenticatable implements JWTSubject
             }
 
             $query->whereNull('organ_id')
+                ->whereNull('instructor_id')
                 ->whereIn('type', $type);
-        })->orderBy('created_at', 'desc')
+        })->orWhere(function ($query) use ($purchasedCoursesInstructorsIds) {
+            $query->whereNull('webinar_id')
+                ->whereIn('instructor_id', $purchasedCoursesInstructorsIds);
+        })->orWhere(function ($query) use ($purchasedCoursesIds) {
+            $query->whereIn('webinar_id', $purchasedCoursesIds);
+        })
+            ->orderBy('created_at', 'desc')
             ->get();
 
 
@@ -673,13 +731,110 @@ class User extends Authenticatable implements JWTSubject
         return $credit - $debit;
     }
 
-    public function getJWTIdentifier()
+    public function getAddress($full = false)
     {
-        return $this->getKey();
+        $address = null;
+
+        if ($full) {
+            $regionIds = [$this->country_id, $this->province_id, $this->city_id, $this->district_id];
+
+            $regions = Region::whereIn('id', $regionIds)->get();
+
+            foreach ($regions as $region) {
+                if ($region->id == $this->country_id) {
+                    $address .= $region->title;
+                } elseif ($region->id == $this->province_id) {
+                    $address .= ', ' . $region->title;
+                } elseif ($region->id == $this->city_id) {
+                    $address .= ', ' . $region->title;
+                } elseif ($region->id == $this->district_id) {
+                    $address .= ', ' . $region->title;
+                }
+            }
+        }
+
+        if (!empty($address)) {
+            $address .= ', ';
+        }
+
+        $address .= $this->address;
+
+        return $address;
     }
 
-    public function getJWTCustomClaims()
+    public function getWaitingDeliveryProductOrdersCount()
     {
-        return [];
+        return ProductOrder::where('seller_id', $this->id)
+            ->where('status', ProductOrder::$waitingDelivery)
+            ->count();
+    }
+
+    public function checkCanAccessToStore()
+    {
+        $result = (!empty(getStoreSettings('status')) and getStoreSettings('status'));
+
+        if (!$result) {
+            $result = $this->can_create_store;
+        }
+
+        return $result;
+    }
+
+    public function getTopicsPostsCount()
+    {
+        $topics = ForumTopic::where('creator_id', $this->id)->count();
+        $posts = ForumTopicPost::where('user_id', $this->id)->count();
+
+        return $topics + $posts;
+    }
+
+    public function getTopicsPostsLikesCount()
+    {
+        $topicsIds = ForumTopic::where('creator_id', $this->id)->pluck('id')->toArray();
+        $postsIds = ForumTopicPost::where('user_id', $this->id)->pluck('id')->toArray();
+
+        $topicsLikes = ForumTopicLike::whereIn('topic_id', $topicsIds)->count();
+        $postsLikes = ForumTopicLike::whereIn('topic_post_id', $postsIds)->count();
+
+        return $topicsLikes + $postsLikes;
+    }
+
+    public function getCountryAndState()
+    {
+        $address = null;
+
+        if (!empty($this->country_id)) {
+            $country = Region::where('id', $this->country_id)->first();
+
+            if (!empty($country)) {
+                $address .= $country->title;
+            }
+        }
+
+        if (!empty($this->province_id)) {
+            $province = Region::where('id', $this->province_id)->first();
+
+            if (!empty($province)) {
+
+                if (!empty($address)) {
+                    $address .= '/';
+                }
+
+                $address .= $province->title;
+            }
+        }
+
+        return $address;
+    }
+
+    public function getRegionByTypeId($typeId, $justTitle = true)
+    {
+        $region = !empty($typeId) ? Region::where('id', $typeId)->first() : null;
+
+        if (!empty($region)) {
+            return $justTitle ? $region->title : $region;
+        }
+
+        return '';
     }
 }

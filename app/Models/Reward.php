@@ -25,6 +25,12 @@ class Reward extends Model
     const REFERRAL = 'referral';
     const LEARNING_PROGRESS_100 = 'learning_progress_100';
     const CHARGE_WALLET = 'charge_wallet';
+    const BUY_STORE_PRODUCT = 'buy_store_product';
+    const PASS_ASSIGNMENT = 'pass_assignment';
+    const MAKE_TOPIC = 'make_topic';
+    const SEND_TOPIC_POST = 'send_post_in_topic';
+    const CREATE_BLOG_BY_INSTRUCTOR = 'create_blog_by_instructor';
+    const COMMENT_FOR_INSTRUCTOR_BLOG = 'comment_for_instructor_blog';
 
     public static function getTypesLists(): array
     {
@@ -44,6 +50,12 @@ class Reward extends Model
             self::REFERRAL,
             self::LEARNING_PROGRESS_100,
             self::CHARGE_WALLET,
+            self::BUY_STORE_PRODUCT,
+            self::PASS_ASSIGNMENT,
+            self::MAKE_TOPIC,
+            self::SEND_TOPIC_POST,
+            self::CREATE_BLOG_BY_INSTRUCTOR,
+            self::COMMENT_FOR_INSTRUCTOR_BLOG,
         ];
     }
 }

@@ -10,12 +10,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Badge;
 use App\Models\BecomeInstructor;
 use App\Models\Category;
+use App\Models\ForumTopic;
 use App\Models\Group;
 use App\Models\GroupUser;
 use App\Models\Region;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\UserBadge;
+use App\Models\UserManualPurchase;
 use App\Models\UserMeta;
 use App\Models\UserOccupation;
 use App\Models\UserRegistrationPackage;
@@ -601,6 +603,7 @@ class UserController extends Controller
                 ->get();
         }
 
+
         $data = [
             'pageTitle' => trans('admin/pages/users.edit_page_title'),
             'user' => $user,
@@ -618,7 +621,173 @@ class UserController extends Controller
             'districts' => $districts,
         ];
 
+        // Purchased Classes Data
+        $data = array_merge($data, $this->getPurchasedClassesData($user));
+
+        // Purchased Bundles Data
+        $data = array_merge($data, $this->getPurchasedBundlesData($user));
+
+        // Purchased Product Data
+        $data = array_merge($data, $this->getPurchasedProductsData($user));
+
+        if (auth()->user()->can('admin_forum_topics_lists')) {
+            $data['topics'] = ForumTopic::where('creator_id', $user->id)
+                ->with([
+                    'posts' => function ($query) {
+                        $query->orderBy('created_at', 'desc');
+                    },
+                    'forum'
+                ])
+                ->withCount('posts')
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
+
         return view('admin.users.edit', $data);
+    }
+
+    private function getPurchasedClassesData($user)
+    {
+        $manualAddedClasses = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('webinar_id')
+            ->where('sales.manual_added', true)
+            ->where('sales.access_to_purchased_item', true)
+            ->whereHas('webinar')
+            ->with([
+                'webinar'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $manualDisabledClasses = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('webinar_id')
+            ->where('sales.access_to_purchased_item', false)
+            ->whereHas('webinar')
+            ->with([
+                'webinar'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $purchasedClasses = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('webinar_id')
+            ->where('sales.access_to_purchased_item', true)
+            ->where('sales.manual_added', false)
+            ->whereHas('webinar')
+            ->with([
+                'webinar'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return [
+            'manualAddedClasses' => $manualAddedClasses,
+            'purchasedClasses' => $purchasedClasses,
+            'manualDisabledClasses' => $manualDisabledClasses,
+        ];
+    }
+
+    private function getPurchasedBundlesData($user)
+    {
+        $manualAddedBundles = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('bundle_id')
+            ->where('sales.manual_added', true)
+            ->where('sales.access_to_purchased_item', true)
+            ->whereHas('bundle')
+            ->with([
+                'bundle'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $manualDisabledBundles = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('bundle_id')
+            ->where('sales.access_to_purchased_item', false)
+            ->whereHas('bundle')
+            ->with([
+                'bundle'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $purchasedBundles = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('bundle_id')
+            ->where('sales.access_to_purchased_item', true)
+            ->where('sales.manual_added', false)
+            ->whereHas('bundle')
+            ->with([
+                'bundle'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return [
+            'manualAddedBundles' => $manualAddedBundles,
+            'purchasedBundles' => $purchasedBundles,
+            'manualDisabledBundles' => $manualDisabledBundles,
+        ];
+    }
+
+    private function getPurchasedProductsData($user)
+    {
+        $manualAddedProducts = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('product_order_id')
+            ->where('sales.manual_added', true)
+            ->where('sales.access_to_purchased_item', true)
+            ->whereHas('productOrder')
+            ->with([
+                'productOrder' => function ($query) {
+                    $query->with([
+                        'product'
+                    ]);
+                }
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $manualDisabledProducts = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('product_order_id')
+            ->where('sales.access_to_purchased_item', false)
+            ->whereHas('productOrder')
+            ->with([
+                'productOrder' => function ($query) {
+                    $query->with([
+                        'product'
+                    ]);
+                }
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $purchasedProducts = Sale::whereNull('refund_at')
+            ->where('buyer_id', $user->id)
+            ->whereNotNull('product_order_id')
+            ->where('sales.access_to_purchased_item', true)
+            ->where('sales.manual_added', false)
+            ->whereHas('productOrder')
+            ->with([
+                'productOrder' => function ($query) {
+                    $query->with([
+                        'product'
+                    ]);
+                }
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return [
+            'manualAddedProducts' => $manualAddedProducts,
+            'purchasedProducts' => $purchasedProducts,
+            'manualDisabledProducts' => $manualDisabledProducts,
+        ];
     }
 
     public function update(Request $request, $id)
@@ -635,6 +804,7 @@ class UserController extends Controller
             'password' => 'nullable|string',
             'bio' => 'nullable|string|min:3|max:48',
             'about' => 'nullable|string|min:3',
+            'certificate_additional' => 'nullable|string|max:255',
             'status' => 'required|' . Rule::in(User::$statuses),
             'ban_start_at' => 'required_if:ban,on',
             'ban_end_at' => 'required_if:ban,on',
@@ -700,9 +870,38 @@ class UserController extends Controller
 
         $user->affiliate = (!empty($data['affiliate']) and $data['affiliate'] == '1');
 
+        $user->can_create_store = (!empty($data['can_create_store']) and $data['can_create_store'] == '1');
+
+        $user->access_content = (!empty($data['access_content']) and $data['access_content'] == '1');
+
         $user->save();
 
+        // save certificate_additional in user metas table
+        $this->handleUserCertificateAdditional($user->id, $data['certificate_additional']);
+
         return redirect()->back();
+    }
+
+    private function handleUserCertificateAdditional($userId, $value)
+    {
+        $name = 'certificate_additional';
+
+        if (empty($value)) {
+            $checkMeta = UserMeta::where('user_id', $userId)
+                ->where('name', $name)
+                ->first();
+
+            if (!empty($checkMeta)) {
+                $checkMeta->delete();
+            }
+        } else {
+            UserMeta::updateOrCreate([
+                'user_id' => $userId,
+                'name' => $name
+            ], [
+                'value' => $value
+            ]);
+        }
     }
 
     public function updateImage(Request $request, $id)
@@ -869,6 +1068,10 @@ class UserController extends Controller
 
         if ($option === "just_organization_role") {
             $users->where('role_name', Role::$organization);
+        }
+
+        if ($option === "just_organization_and_teacher_role") {
+            $users->whereIn('role_name', [Role::$organization, Role::$teacher]);
         }
 
         if ($option === "consultants") {

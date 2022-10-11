@@ -9,12 +9,17 @@ use App\Models\DiscountUser;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentChannel;
+use App\Models\Product;
+use App\Models\ProductOrder;
+use App\Models\Region;
 use App\Models\ReserveMeeting;
 use App\Models\Setting;
 use App\Models\Webinar;
 use App\PaymentChannels\ChannelManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class CartController extends Controller
 {
@@ -31,30 +36,97 @@ class CartController extends Controller
                         'meetingTime'
                     ]);
                 },
-                'ticket'
+                'ticket',
+                'productOrder' => function ($query) {
+                    $query->whereHas('product');
+                    $query->with(['product']);
+                }
             ])
             ->get();
 
         if (!empty($carts) and !$carts->isEmpty()) {
             $calculate = $this->calculatePrice($carts, $user);
 
+            $hasPhysicalProduct = $carts->where('productOrder.product.type', Product::$physical);
+
+            $deliveryEstimateTime = 0;
+
+            if (!empty($hasPhysicalProduct) and count($hasPhysicalProduct)) {
+                foreach ($hasPhysicalProduct as $physicalProductCart) {
+                    if (!empty($physicalProductCart->productOrder) and
+                        !empty($physicalProductCart->productOrder->product) and
+                        !empty($physicalProductCart->productOrder->product->delivery_estimated_time) and
+                        $physicalProductCart->productOrder->product->delivery_estimated_time > $deliveryEstimateTime
+                    ) {
+                        $deliveryEstimateTime = $physicalProductCart->productOrder->product->delivery_estimated_time;
+                    }
+                }
+            }
+
             if (!empty($calculate)) {
+
                 $data = [
                     'pageTitle' => trans('public.cart_page_title'),
+                    'user' => $user,
                     'carts' => $carts,
                     'subTotal' => $calculate["sub_total"],
                     'totalDiscount' => $calculate["total_discount"],
                     'tax' => $calculate["tax"],
                     'taxPrice' => $calculate["tax_price"],
                     'total' => $calculate["total"],
-                    'userGroup' => $user->userGroup ? $user->userGroup->group : null,
+                    'productDeliveryFee' => $calculate["product_delivery_fee"],
+                    'taxIsDifferent' => $calculate["tax_is_different"],
+                    'userGroup' => !empty($user->userGroup) ? $user->userGroup->group : null,
+                    'hasPhysicalProduct' => (count($hasPhysicalProduct) > 0),
+                    'deliveryEstimateTime' => $deliveryEstimateTime,
                 ];
+
+                $data = array_merge($data, $this->getUserLocationsData($user));
 
                 return view('web.default.cart.cart', $data);
             }
         }
 
         return redirect('/');
+    }
+
+    private function getUserLocationsData($user)
+    {
+        $provinces = null;
+        $cities = null;
+        $districts = null;
+
+        $countries = Region::select(DB::raw('*, ST_AsText(geo_center) as geo_center'))
+            ->where('type', Region::$country)
+            ->get();
+
+        if (!empty($user->country_id)) {
+            $provinces = Region::select(DB::raw('*, ST_AsText(geo_center) as geo_center'))
+                ->where('type', Region::$province)
+                ->where('country_id', $user->country_id)
+                ->get();
+        }
+
+        if (!empty($user->province_id)) {
+            $cities = Region::select(DB::raw('*, ST_AsText(geo_center) as geo_center'))
+                ->where('type', Region::$city)
+                ->where('province_id', $user->province_id)
+                ->get();
+        }
+
+        if (!empty($user->city_id)) {
+            $districts = Region::select(DB::raw('*, ST_AsText(geo_center) as geo_center'))
+                ->where('type', Region::$district)
+                ->where('city_id', $user->city_id)
+                ->get();
+        }
+
+        return [
+            'countries' => $countries,
+            'provinces' => $provinces,
+            'cities' => $cities,
+            'districts' => $districts,
+        ];
     }
 
     public function couponValidate(Request $request)
@@ -125,6 +197,30 @@ class CartController extends Controller
                 }
             } else {
                 $totalDiscount = ($totalWebinarsAmount > 0) ? $totalWebinarsAmount * $percent / 100 : 0;
+            }
+        } elseif ($discount->source == Discount::$discountSourceProduct) {
+            $totalProductsAmount = 0;
+            $productOtherDiscounts = 0;
+
+            foreach ($carts as $cart) {
+                if (!empty($cart->productOrder)) {
+                    $product = $cart->productOrder->product;
+
+                    if (!empty($product) and ($discount->product_type == 'all' or $discount->product_type == $product->type)) {
+                        $totalProductsAmount += ($product->price * $cart->productOrder->quantity);
+                        $productOtherDiscounts += $product->getDiscountPrice();
+                    }
+                }
+            }
+
+            if ($discount->discount_type == Discount::$discountTypeFixedAmount) {
+                $totalDiscount = ($totalProductsAmount > $discount->amount) ? $discount->amount : $totalProductsAmount;
+
+                if (!empty($productOtherDiscounts)) {
+                    $totalDiscount = $totalDiscount - (int)$productOtherDiscounts;
+                }
+            } else {
+                $totalDiscount = ($totalProductsAmount > 0) ? $totalProductsAmount * $percent / 100 : 0;
             }
         } elseif ($discount->source == Discount::$discountSourceMeeting) {
             $totalMeetingAmount = 0;
@@ -209,24 +305,88 @@ class CartController extends Controller
         return $totalDiscount;
     }
 
+    private function productDeliveryFeeBySeller($carts)
+    {
+        $productFee = [];
+
+        foreach ($carts as $cart) {
+            if (!empty($cart->productOrder) and !empty($cart->productOrder->product)) {
+                $product = $cart->productOrder->product;
+
+                if (!empty($product->delivery_fee)) {
+                    if (!empty($productFee[$product->creator_id]) and $productFee[$product->creator_id] < $product->delivery_fee) {
+                        $productFee[$product->creator_id] = $product->delivery_fee;
+                    } else if (empty($productFee[$product->creator_id])) {
+                        $productFee[$product->creator_id] = $product->delivery_fee;
+                    }
+                }
+            }
+        }
+
+        return $productFee;
+    }
+
+    private function productCountBySeller($carts)
+    {
+        $productCount = [];
+
+        foreach ($carts as $cart) {
+            if (!empty($cart->productOrder) and !empty($cart->productOrder->product)) {
+                $product = $cart->productOrder->product;
+
+                if (!empty($productCount[$product->creator_id])) {
+                    $productCount[$product->creator_id] += 1;
+                } else {
+                    $productCount[$product->creator_id] = 1;
+                }
+            }
+        }
+
+        return $productCount;
+    }
+
+    private function calculateProductDeliveryFee($carts)
+    {
+        $fee = 0;
+
+        if (!empty($carts)) {
+            $productsFee = $this->productDeliveryFeeBySeller($carts);
+
+            if (!empty($productsFee) and count($productsFee)) {
+                $fee = array_sum($productsFee);
+            }
+        }
+
+        return $fee;
+    }
+
     private function calculatePrice($carts, $user, $discountCoupon = null)
     {
+        $financialSettings = getFinancialSettings();
+
+        $subTotal = 0;
         $totalDiscount = 0;
+        $tax = (!empty($financialSettings['tax']) and $financialSettings['tax'] > 0) ? $financialSettings['tax'] : 0;
+        $taxPrice = 0;
+        $commissionPrice = 0;
+        $commission = 0;
 
-        $subTotal = $carts->sum(function ($cart) use ($user, &$totalDiscount) {
-            $price = 0;
+        $cartHasWebinar = array_filter($carts->pluck('webinar_id')->toArray());
+        $cartHasBundle = array_filter($carts->pluck('bundle_id')->toArray());
+        $cartHasMeeting = array_filter($carts->pluck('reserve_meeting_id')->toArray());
 
-            if (!empty($cart->webinar_id)) {
-                $price = $cart->webinar->price;
-                $totalDiscount += $cart->webinar->getDiscount($cart->ticket, $user);
-            } elseif (!empty($cart->reserve_meeting_id)) {
-                $price = $cart->reserveMeeting->paid_amount;
-                $totalDiscount += $cart->reserveMeeting->getDiscountPrice($user);
-            }
+        $taxIsDifferent = (count($cartHasWebinar) or count($cartHasBundle) or count($cartHasMeeting));
 
-            return $price;
-        });
-
+        foreach ($carts as $cart) {
+            $orderPrices = $this->handleOrderPrices($cart, $user, $taxIsDifferent);
+            $subTotal += $orderPrices['sub_total'];
+            $totalDiscount += $orderPrices['total_discount'];
+            $tax = $orderPrices['tax'];
+            $taxPrice += $orderPrices['tax_price'];
+            $commission += $orderPrices['commission'];
+            $commissionPrice += $orderPrices['commission_price'];
+            $taxIsDifferent = $orderPrices['tax_is_different'];
+        }
 
         if (!empty($discountCoupon)) {
             $totalDiscount += $this->handleDiscountPrice($discountCoupon, $carts, $subTotal);
@@ -236,22 +396,10 @@ class CartController extends Controller
             $totalDiscount = $subTotal;
         }
 
-        $subTotalWithDiscount = $subTotal - $totalDiscount;
+        $subTotalWithoutDiscount = $subTotal - $totalDiscount;
+        $productDeliveryFee = $this->calculateProductDeliveryFee($carts);
 
-        $financialSettings = getFinancialSettings();
-        $commission = $user->getCommission();
-
-        $tax = 0;
-        $taxPrice = 0;
-
-        if (!empty($financialSettings['tax']) and $financialSettings['tax'] > 0 and $subTotalWithDiscount > 0) {
-            $tax = $financialSettings['tax'];
-            $taxPrice = $subTotalWithDiscount * $tax / 100;
-        }
-
-        $commissionPrice = $subTotalWithDiscount > 0 ? $subTotalWithDiscount * $commission / 100 : 0;
-
-        $total = $subTotalWithDiscount + $taxPrice;
+        $total = $subTotalWithoutDiscount + $taxPrice + $productDeliveryFee;
 
         if ($total < 0) {
             $total = 0;
@@ -265,11 +413,30 @@ class CartController extends Controller
             'commission' => $commission,
             'commission_price' => round($commissionPrice, 2),
             'total' => round($total, 2),
+            'product_delivery_fee' => round($productDeliveryFee, 2),
+            'tax_is_different' => $taxIsDifferent
         ];
     }
 
-    public function checkout(Request $request)
+    public function checkout(Request $request, $carts = null)
     {
+        $user = auth()->user();
+
+        if (empty($carts)) {
+            $carts = Cart::where('creator_id', $user->id)
+                ->get();
+        }
+
+        $hasPhysicalProduct = $carts->where('productOrder.product.type', Product::$physical);
+
+        $this->validate($request, [
+            'country_id' => Rule::requiredIf(count($hasPhysicalProduct) > 0),
+            'province_id' => Rule::requiredIf(count($hasPhysicalProduct) > 0),
+            'city_id' => Rule::requiredIf(count($hasPhysicalProduct) > 0),
+            'district_id' => Rule::requiredIf(count($hasPhysicalProduct) > 0),
+            'address' => Rule::requiredIf(count($hasPhysicalProduct) > 0),
+        ]);
+
         $discountId = $request->input('discount_id');
 
         $paymentChannels = PaymentChannel::where('status', 'active')->get();
@@ -280,14 +447,14 @@ class CartController extends Controller
             $discountCoupon = null;
         }
 
-        $user = auth()->user();
-        $carts = Cart::where('creator_id', $user->id)
-            ->get();
-
         if (!empty($carts) and !$carts->isEmpty()) {
             $calculate = $this->calculatePrice($carts, $user, $discountCoupon);
 
             $order = $this->createOrderAndOrderItems($carts, $calculate, $user, $discountCoupon);
+
+            if (count($hasPhysicalProduct) > 0) {
+                $this->updateProductOrders($request, $carts, $user);
+            }
 
             if (!empty($order) and $order->total_amount > 0) {
                 $razorpay = false;
@@ -322,6 +489,29 @@ class CartController extends Controller
         return redirect('/cart');
     }
 
+    private function updateProductOrders(Request $request, $carts, $user)
+    {
+        $data = $request->all();
+
+        foreach ($carts as $cart) {
+            if (!empty($cart->product_order_id)) {
+                ProductOrder::where('id', $cart->product_order_id)
+                    ->where('buyer_id', $user->id)
+                    ->update([
+                        'message_to_seller' => $data['message_to_seller'],
+                    ]);
+            }
+        }
+
+        $user->update([
+            'country_id' => $data['country_id'] ?? $user->country_id,
+            'province_id' => $data['province_id'] ?? $user->province_id,
+            'city_id' => $data['city_id'] ?? $user->city_id,
+            'district_id' => $data['district_id'] ?? $user->district_id,
+            'address' => $data['address'] ?? $user->address,
+        ]);
+    }
+
     public function createOrderAndOrderItems($carts, $calculate, $user, $discountCoupon = null)
     {
         $order = Order::create([
@@ -331,23 +521,35 @@ class CartController extends Controller
             'tax' => $calculate["tax_price"],
             'total_discount' => $calculate["total_discount"],
             'total_amount' => $calculate["total"],
+            'product_delivery_fee' => $calculate["product_delivery_fee"] ?? null,
             'created_at' => time(),
         ]);
 
-        foreach ($carts as $cart) {
-            $price = 0;
-            $discount = 0;
-            $discountCouponPrice = 0;
-            $sellerUser = null;
+        $productsFee = $this->productDeliveryFeeBySeller($carts);
+        $sellersProductsCount = $this->productCountBySeller($carts);
 
-            if (!empty($cart->webinar_id)) {
-                $price = $cart->webinar->price;
-                $discount = $cart->webinar->getDiscount($cart->ticket, $user);
-                $sellerUser = $cart->webinar->creator;
-            } elseif (!empty($cart->reserve_meeting_id)) {
-                $price = $cart->reserveMeeting->paid_amount;
-                $discount = $cart->reserveMeeting->getDiscountPrice($user);
-                $sellerUser = $cart->reserveMeeting->meeting->creator;
+        foreach ($carts as $cart) {
+
+            $orderPrices = $this->handleOrderPrices($cart, $user);
+            $price = $orderPrices['sub_total'];
+            $totalDiscount = $orderPrices['total_discount'];
+            $tax = $orderPrices['tax'];
+            $taxPrice = $orderPrices['tax_price'];
+            $commission = $orderPrices['commission'];
+            $commissionPrice = $orderPrices['commission_price'];
+            $discountCouponPrice = 0;
+
+            $productDeliveryFee = 0;
+            if (!empty($cart->product_order_id)) {
+                $product = $cart->productOrder->product;
+
+                if (!empty($product) and !empty($productsFee[$product->creator_id])) {
+                    $productDeliveryFee = $productsFee[$product->creator_id];
+                }
+
+                $sellerProductCount = !empty($sellersProductsCount[$product->creator_id]) ? $sellersProductsCount[$product->creator_id] : 1;
+
+                $productDeliveryFee = $productDeliveryFee > 0 ? $productDeliveryFee / $sellerProductCount : 0;
             }
 
             if (!empty($discountCoupon)) {
@@ -360,24 +562,10 @@ class CartController extends Controller
                 }
             }
 
-            $financialSettings = getFinancialSettings();
-            $commission = $financialSettings['commission'] ?? 0;
-            $tax = $financialSettings['tax'] ?? 0;
+            $allDiscountPrice = $totalDiscount + $discountCouponPrice;
 
-            if (!empty($sellerUser)) {
-                $commission = $sellerUser->getCommission();
-            }
-
-            $allDiscountPrice = $discount + $discountCouponPrice;
-            $subAmount = $price - $allDiscountPrice;
-
-            if ($allDiscountPrice > $price) {
-                $subAmount = 0;
-            }
-
-            $taxPrice = ($tax and $subAmount > 0) ? ($subAmount * $tax) / 100 : 0;
-            $commissionPrice = $subAmount > 0 ? ($subAmount * $commission) / 100 : 0;
-            $totalAmount = $subAmount + $taxPrice;
+            $subTotalWithoutDiscount = $price - $allDiscountPrice;
+            $totalAmount = $subTotalWithoutDiscount + $taxPrice + $productDeliveryFee;
 
             $ticket = $cart->ticket;
             if (!empty($ticket) and !$ticket->isValid()) {
@@ -388,6 +576,9 @@ class CartController extends Controller
                 'user_id' => $user->id,
                 'order_id' => $order->id,
                 'webinar_id' => $cart->webinar_id ?? null,
+                'bundle_id' => $cart->bundle_id ?? null,
+                'product_id' => (!empty($cart->product_order_id) and !empty($cart->productOrder->product)) ? $cart->productOrder->product->id : null,
+                'product_order_id' => (!empty($cart->product_order_id)) ? $cart->product_order_id : null,
                 'reserve_meeting_id' => $cart->reserve_meeting_id ?? null,
                 'subscribe_id' => $cart->subscribe_id ?? null,
                 'promotion_id' => $cart->promotion_id ?? null,
@@ -399,12 +590,102 @@ class CartController extends Controller
                 'tax_price' => $taxPrice,
                 'commission' => $commission,
                 'commission_price' => $commissionPrice,
-                'discount' => $discount + $discountCouponPrice,
+                'product_delivery_fee' => $productDeliveryFee,
+                'discount' => $allDiscountPrice,
                 'created_at' => time(),
             ]);
         }
 
         return $order;
+    }
+
+    private function handleOrderPrices($cart, $user, $taxIsDifferent = false)
+    {
+        $financialSettings = getFinancialSettings();
+
+        $subTotal = 0;
+        $totalDiscount = 0;
+        $tax = (!empty($financialSettings['tax']) and $financialSettings['tax'] > 0) ? $financialSettings['tax'] : 0;
+        $taxPrice = 0;
+        $commissionPrice = 0;
+        $commission = $user->getCommission();
+
+        if (!empty($cart->webinar_id) or !empty($cart->bundle_id)) {
+            $item = !empty($cart->webinar_id) ? $cart->webinar : $cart->bundle;
+            $price = $item->price;
+            $discount = $item->getDiscount($cart->ticket, $user);
+
+            $priceWithoutDiscount = $price - $discount;
+
+            if ($tax > 0 and $priceWithoutDiscount > 0) {
+                $taxPrice += $priceWithoutDiscount * $tax / 100;
+            }
+
+            if (!empty($commission) and $commission > 0) {
+                $commissionPrice += $priceWithoutDiscount > 0 ? $priceWithoutDiscount * $commission / 100 : 0;
+            }
+
+            $totalDiscount += $discount;
+            $subTotal += $price;
+        } elseif (!empty($cart->reserve_meeting_id)) {
+            $price = $cart->reserveMeeting->paid_amount;
+            $discount = $cart->reserveMeeting->getDiscountPrice($user);
+
+            $priceWithoutDiscount = $price - $discount;
+
+            if ($tax > 0 and $priceWithoutDiscount > 0) {
+                $taxPrice += $priceWithoutDiscount * $tax / 100;
+            }
+
+            if (!empty($commission) and $commission > 0) {
+                $commissionPrice += $priceWithoutDiscount > 0 ? $priceWithoutDiscount * $commission / 100 : 0;
+            }
+
+            $totalDiscount += $discount;
+            $subTotal += $price;
+        } elseif (!empty($cart->product_order_id)) {
+            $product = $cart->productOrder->product;
+
+            if (!empty($product)) {
+                $price = ($product->price * $cart->productOrder->quantity);
+                $discount = $product->getDiscountPrice();
+
+                $commission = $product->getCommission();
+                $productTax = $product->getTax();
+
+                $priceWithoutDiscount = $price - $discount;
+
+                $taxIsDifferent = ($taxIsDifferent and $tax != $productTax);
+
+                $tax = $productTax;
+                if ($productTax > 0 and $priceWithoutDiscount > 0) {
+                    $taxPrice += $priceWithoutDiscount * $productTax / 100;
+                }
+
+                if ($commission > 0) {
+                    $commissionPrice += $priceWithoutDiscount > 0 ? $priceWithoutDiscount * $commission / 100 : 0;
+                }
+
+                $totalDiscount += $discount;
+                $subTotal += $price;
+            }
+        }
+
+        if ($totalDiscount > $subTotal) {
+            $totalDiscount = $subTotal;
+        }
+
+
+        return [
+            'sub_total' => round($subTotal, 2),
+            'total_discount' => round($totalDiscount, 2),
+            'tax' => $tax,
+            'tax_price' => round($taxPrice, 2),
+            'commission' => $commission,
+            'commission_price' => round($commissionPrice, 2),
+            //'product_delivery_fee' => round($productDeliveryFee, 2),
+            'tax_is_different' => $taxIsDifferent
+        ];
     }
 
     private function handlePaymentOrderWithZeroTotalAmount($order)

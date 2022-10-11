@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\ForumTopic;
 use App\Models\Newsletter;
+use App\Models\Product;
 use App\Models\ReserveMeeting;
 use App\Models\Reward;
 use App\Models\RewardAccounting;
@@ -31,6 +33,19 @@ class UserController extends Controller
     {
         $user = User::where('id', $id)
             ->whereIn('role_name', [Role::$organization, Role::$teacher, Role::$user])
+            ->with([
+                'blog' => function ($query) {
+                    $query->where('status', 'publish');
+                    $query->withCount([
+                        'comments' => function ($query) {
+                            $query->where('status', 'active');
+                        }
+                    ]);
+                },
+                'products' => function ($query) {
+                    $query->where('status', Product::$active);
+                },
+            ])
             ->first();
 
         if (!$user) {
@@ -92,6 +107,14 @@ class UserController extends Controller
             ->toArray();
         $user->students_count = count(array_unique($studentsIds));
 
+        $instructors = null;
+        if ($user->isOrganization()) {
+            $instructors = User::where('organ_id', $user->id)
+                ->where('role_name', Role::$teacher)
+                ->where('status', 'active')
+                ->get();
+        }
+
         $data = [
             'pageTitle' => $user->full_name . ' ' . trans('public.profile'),
             'user' => $user,
@@ -108,9 +131,32 @@ class UserController extends Controller
             'webinars' => $webinars,
             'appointments' => $appointments,
             'meetingTimezone' => $meeting ? $meeting->getTimezone() : null,
+            'instructors' => $instructors,
+            'forumTopics' => $this->getUserForumTopics($user->id)
         ];
 
         return view('web.default.user.profile', $data);
+    }
+
+    private function getUserForumTopics($userId)
+    {
+        $forumTopics = null;
+
+        if (!empty(getFeaturesSettings('forums_status')) and getFeaturesSettings('forums_status')) {
+            $forumTopics = ForumTopic::where('creator_id', $userId)
+                ->orderBy('pin', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->withCount([
+                    'posts'
+                ])
+                ->get();
+
+            foreach ($forumTopics as $topic) {
+                $topic->lastPost = $topic->posts()->orderBy('created_at', 'desc')->first();
+            }
+        }
+
+        return $forumTopics;
     }
 
     public function followToggle($id)

@@ -24,4 +24,9 @@ class Certificate extends Model
     {
         return $this->hasOne('App\Models\QuizzesResult', 'id', 'quiz_result_id');
     }
+
+    public function webinar()
+    {
+        return $this->belongsTo('App\Models\Webinar', 'webinar_id', 'id');
+    }
 }

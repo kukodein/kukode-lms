@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Comment;
 use App\Models\CommentReport;
+use App\Models\Reward;
+use App\Models\RewardAccounting;
 use App\Models\Webinar;
 use Illuminate\Http\Request;
 
@@ -21,7 +23,7 @@ class CommentController extends Controller
         $item_name = $request->get('item_name');
         $item_id = $request->get('item_id');
 
-        Comment::create([
+        $comment = Comment::create([
             $item_name => $item_id,
             'user_id' => $user->id,
             'comment' => $request->input('comment'),
@@ -37,6 +39,27 @@ class CommentController extends Controller
                 '[u.name]' => $user->full_name
             ];
             sendNotification('new_comment', $notifyOptions, 1);
+        } elseif ($item_name == 'product_id') {
+            $product = $comment->product;
+
+            $notifyOptions = [
+                '[p.title]' => $product->title,
+                '[u.name]' => $user->full_name
+            ];
+            sendNotification('product_new_comment', $notifyOptions, 1);
+        } elseif ($item_name == 'blog_id') {
+            $blog = $comment->blog;
+
+            if(!empty($blog) and !$blog->author->isAdmin()) {
+                $notifyOptions = [
+                    '[blog_title]' => $blog->title,
+                    '[u.name]' => $user->full_name
+                ];
+                sendNotification('new_comment_for_instructor_blog_post', $notifyOptions, $blog->author->id);
+
+                $buyStoreReward = RewardAccounting::calculateScore(Reward::COMMENT_FOR_INSTRUCTOR_BLOG);
+                RewardAccounting::makeRewardAccounting($comment->user_id, $buyStoreReward, Reward::COMMENT_FOR_INSTRUCTOR_BLOG, $comment->id);
+            }
         }
 
         $toastData = [

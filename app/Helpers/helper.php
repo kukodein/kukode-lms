@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Support\Facades\Cookie;
+
 function getTemplate()
 {
     /*$template = cache()->remember('view.template', 7 * 24 * 60 * 60, function () {
@@ -208,6 +210,39 @@ function getBindedSQL($query)
     return $fullQuery;
 }
 
+function getUserLanguagesLists()
+{
+    $generalSettings = getGeneralSettings();
+    $userLanguages = ($generalSettings and !empty($generalSettings['user_languages'])) ? $generalSettings['user_languages'] : null;
+
+    if (!empty($userLanguages) and is_array($userLanguages)) {
+        $userLanguages = getLanguages($userLanguages);
+    } else {
+        $userLanguages = [];
+    }
+
+    if (count($userLanguages) > 0) {
+        foreach ($userLanguages as $locale => $language) {
+            if (mb_strtolower($locale) == mb_strtolower(app()->getLocale())) {
+                $firstKey = array_key_first($userLanguages);
+
+                if ($firstKey != $locale) {
+                    $firstValue = $userLanguages[$firstKey];
+
+                    unset($userLanguages[$locale]);
+                    unset($userLanguages[$firstKey]);
+
+                    $userLanguages = array_merge([
+                        $locale => $language,
+                        $firstKey => $firstValue
+                    ], $userLanguages);
+                }
+            }
+        }
+    }
+
+    return $userLanguages;
+}
 
 function getLanguages($lang = null)
 {
@@ -1032,7 +1067,7 @@ function truncate($text, $length, $withTail = true)
 
 
 /**
- * @param null $page => home, search, classes, categories, login, register, contact, blog, certificate_validation, 'instructors', 'organizations'
+ * @param null $page => Setting::$pagesSeoMetas
  * @return array [title, description]
  */
 function getSeoMetas($page = null)
@@ -1069,11 +1104,23 @@ function getGeneralSettings($key = null)
  * @param null $key
  * $key => "agora_resolution" | "agora_max_bitrate" | "agora_min_bitrate" | "agora_frame_rate" | "agora_live_streaming" | "agora_chat" | "agora_cloud_rec" | "agora_in_free_courses"
  * "new_interactive_file" | "timezone_in_register" | "timezone_in_create_webinar"
+ * "sequence_content_status" | "webinar_assignment_status" | "webinar_private_content_status" | "disable_view_content_after_user_register"
+ * "direct_classes_payment_button_status" | "mobile_app_status" | "cookie_settings_status" | "show_other_register_method" | "show_certificate_additional_in_register"
  * @return
  * */
 function getFeaturesSettings($key = null)
 {
     return App\Models\Setting::getFeaturesSettings($key);
+}
+
+/**
+ * @param null $key
+ * $key => cookie_settings_modal_message | cookie_settings_modal_items
+ * @return
+ * */
+function getCookieSettings($key = null)
+{
+    return App\Models\Setting::getCookieSettings($key);
 }
 
 
@@ -1108,7 +1155,7 @@ function getHomeVideoOrImageBoxSettings()
 /**
  * @param null $page => admin_login, admin_dashboard, login, register, remember_pass, search, categories,
  * become_instructor, certificate_validation, blog, instructors
- * ,dashboard, panel_sidebar, user_avatar, user_cover, instructor_finder_wizard
+ * ,dashboard, panel_sidebar, user_avatar, user_cover, instructor_finder_wizard, products_lists
  * @return string|array => [all pages]
  */
 function getPageBackgroundSettings($page = null)
@@ -1284,9 +1331,25 @@ function getRewardsSettings()
     return App\Models\Setting::getRewardsSettings();
 }
 
+/**
+ * @param $kay => [status, virtual_product_commission, physical_product_commission, store_tax,
+ *                 possibility_create_virtual_product, possibility_create_physical_product,
+ *                 shipping_tracking_url, activate_comments
+ *              ]
+ */
+function getStoreSettings($key = null)
+{
+    return App\Models\Setting::getStoreSettings($key);
+}
+
 function getBecomeInstructorSectionSettings()
 {
     return App\Models\Setting::getBecomeInstructorSectionSettings();
+}
+
+function getForumSectionSettings()
+{
+    return App\Models\Setting::getForumSectionSettings();
 }
 
 function getRegistrationPackagesGeneralSettings($key = null)
@@ -1304,6 +1367,123 @@ function getRegistrationPackagesOrganizationsSettings($key = null)
     return App\Models\Setting::getRegistrationPackagesOrganizationsSettings($key);
 }
 
+function getMobileAppSettings($key = null)
+{
+    return App\Models\Setting::getMobileAppSettings($key);
+}
+
+function getRemindersSettings($key = null)
+{
+    return App\Models\Setting::getRemindersSettings($key);
+}
+
+function getAdvertisingModalSettings()
+{
+    $cookieKey = 'show_advertise_modal';
+    $settings = App\Models\Setting::getAdvertisingModalSettings();
+
+    $show = false;
+
+    if (!empty($settings) and !empty($settings['status']) and $settings['status'] == 1) {
+        $checkCookie = Cookie::get($cookieKey);
+
+        if (empty($checkCookie)) {
+            $show = true;
+
+            Cookie::queue($cookieKey, 1, 30 * 24 * 60);
+        }
+    }
+
+    return $show ? $settings : null;
+}
+
+function getOthersPersonalizationSettings($key = null)
+{
+    return \App\Models\Setting::getOthersPersonalizationSettings($key);
+}
+
+/**
+ * @return string ("primary_color"|"secondary_color") || null
+ * */
+function getThemeColorsSettings($admin = false)
+{
+    $settings = App\Models\Setting::getThemeColorsSettings();
+
+    $result = '';
+
+    if (!empty($settings) and count($settings)) {
+        $result = ":root{" . PHP_EOL;
+
+        if ($admin) {
+            foreach (\App\Models\Setting::$rootAdminColors as $color) {
+                if (!empty($settings['admin_' . $color])) {
+                    $result .= "--$color:" . $settings['admin_' . $color] . ';' . PHP_EOL;
+                }
+            }
+        } else {
+            foreach (\App\Models\Setting::$rootColors as $color) {
+                if (!empty($settings[$color])) {
+                    $result .= "--$color:" . $settings[$color] . ';' . PHP_EOL;
+                }
+            }
+        }
+
+        $result .= "}" . PHP_EOL;
+    }
+
+    return $result;
+}
+
+
+/**
+ * @return string ("primary_color"|"secondary_color") || null
+ * */
+function getThemeFontsSettings()
+{
+    $settings = App\Models\Setting::getThemeFontsSettings();
+
+    $result = '';
+
+    if (!empty($settings) and count($settings)) {
+
+        foreach ($settings as $type => $setting) {
+
+            if (!empty($settings[$type]['regular'])) {
+                $result .= "@font-face {
+                      font-family: '$type-font-family';
+                      font-style: normal;
+                      font-weight: 400;
+                      font-display: swap;
+                      src: local('Montserrat Regular'), local('Montserrat-Regular'), url({$settings[$type]['regular']}) format('woff2');
+                    }";
+            }
+
+            if (!empty($settings[$type]['bold'])) {
+                $result .= "@font-face {
+                      font-family: '$type-font-family';
+                      font-style: normal;
+                      font-weight: bold;
+                      font-display: swap;
+                      src: local('Montserrat Regular'), local('Montserrat-Regular'), url({$settings[$type]['bold']}) format('woff2');
+                    }";
+            }
+
+            if (!empty($settings[$type]['medium'])) {
+                $result .= "@font-face {
+                      font-family: '$type-font-family';
+                      font-style: normal;
+                      font-weight: 500;
+                      font-display: swap;
+                      src: local('Montserrat Regular'), local('Montserrat-Regular'), url({$settings[$type]['medium']}) format('woff2');
+                    }";
+            }
+
+        }
+    }
+
+    return $result;
+}
+
 /**
  * @param $page => home, search, classes, categories, login, register, contact, blog, certificate_validation, 'instructors', 'organizations'
  *
@@ -1314,6 +1494,11 @@ function getPageRobot($page)
     $seoSettings = getSeoMetas($page);
 
     return (empty($seoSettings['robot']) or $seoSettings['robot'] != 'noindex') ? 'index, follow, all' : 'NOODP, nofollow, noindex';
+}
+
+function getPageRobotNoIndex()
+{
+    return 'NOODP, nofollow, noindex';
 }
 
 function getDefaultLocale()
@@ -1380,7 +1565,9 @@ function sendNotification($template, $options, $user_id = null, $group_id = null
             ->where('type', $type)
             ->first();
 
-        if (empty($check) or $template != 'new_badge') {
+        $ignoreDuplicateTemplates = ['new_badge'];
+
+        if (empty($check) or !in_array($template, $ignoreDuplicateTemplates)) {
             \App\Models\Notification::create([
                 'user_id' => $user_id,
                 'group_id' => $group_id,
@@ -1494,7 +1681,7 @@ function checkCourseForSale($course, $user)
         return back()->with(['toast' => $toastData]);
     }
 
-    if ($course->checkUserHasBought()) {
+    if ($course->checkUserHasBought($user)) {
         $toastData = [
             'title' => trans('cart.fail_purchase'),
             'msg' => trans('site.you_bought_webinar'),
@@ -1513,13 +1700,15 @@ function checkCourseForSale($course, $user)
     }
 
     $isRequiredPrerequisite = false;
-    $prerequisites = $course->prerequisites;
-    if (count($prerequisites)) {
-        foreach ($prerequisites as $prerequisite) {
-            $prerequisiteWebinar = $prerequisite->prerequisiteWebinar;
+    if (!empty($course->prerequisites)) {
+        $prerequisites = $course->prerequisites;
+        if (count($prerequisites)) {
+            foreach ($prerequisites as $prerequisite) {
+                $prerequisiteWebinar = $prerequisite->prerequisiteWebinar;
 
-            if ($prerequisite->required and !empty($prerequisiteWebinar) and !$prerequisiteWebinar->checkUserHasBought()) {
-                $isRequiredPrerequisite = true;
+                if ($prerequisite->required and !empty($prerequisiteWebinar) and !$prerequisiteWebinar->checkUserHasBought()) {
+                    $isRequiredPrerequisite = true;
+                }
             }
         }
     }
@@ -1528,6 +1717,29 @@ function checkCourseForSale($course, $user)
         $toastData = [
             'title' => trans('public.request_failed'),
             'msg' => trans('cart.this_course_has_required_prerequisite'),
+            'status' => 'error'
+        ];
+        return back()->with(['toast' => $toastData]);
+    }
+
+    return 'ok';
+}
+
+function checkProductForSale($product, $user)
+{
+    if ($product->getAvailability() < 1) {
+        $toastData = [
+            'title' => trans('public.request_failed'),
+            'msg' => trans('update.product_not_availability'),
+            'status' => 'error'
+        ];
+        return back()->with(['toast' => $toastData]);
+    }
+
+    if ($product->creator_id == $user->id) {
+        $toastData = [
+            'title' => trans('public.request_failed'),
+            'msg' => trans('update.cant_purchase_your_product'),
             'status' => 'error'
         ];
         return back()->with(['toast' => $toastData]);
@@ -1550,6 +1762,8 @@ function getTranslateAttributeValue($model, $key, $loca = null)
 
     $locale = app()->getLocale();
     $contentLocale = $isAdminUrl ? getContentLocale() : null; // for admin edit contents
+
+    $isEditModel = ($isAdminUrl and !empty($contentLocale) and is_array($contentLocale) and $contentLocale['table'] == $model->getTable() and $contentLocale['item_id'] == $model->id);
 
     if ($isAdminUrl and
         !empty($contentLocale) and
@@ -1580,7 +1794,7 @@ function getTranslateAttributeValue($model, $key, $loca = null)
             $defaultLocale = getDefaultLocale();
 
             return getTranslateAttributeValue($model, $key, $defaultLocale);
-        } else if (!empty($loca) and !empty($model->translations) and count($model->translations)) {
+        } else if ((!empty($loca) or !$isEditModel) and !empty($model->translations) and count($model->translations)) {
             $translations = $model->translations->first();
 
             return getTranslateAttributeValue($model, $key, $translations->locale);
@@ -1682,7 +1896,7 @@ function handlePrice($price, $showCurrency = true, $format = false, $coursePageP
     return $price;
 }
 
-function addCurrencyToPrice($price): string
+function addCurrencyToPrice($price)
 {
     if (!empty($price)) {
         $currency = currencySign();
@@ -1730,4 +1944,35 @@ function handleCoursePagePrice($price)
     ];
 }
 
-include  'apihelper.php';
+
+function checkShowCookieSecurityDialog()
+{
+    $show = false;
+
+    if (getFeaturesSettings('cookie_settings_status')) {
+
+        if (auth()->check()) {
+            $checkDB = \App\Models\UserCookieSecurity::where('user_id', auth()->id())
+                ->first();
+
+            $show = empty($checkDB);
+        } else {
+            $checkCookie = Cookie::get('cookie-security');
+
+            $show = empty($checkCookie);
+        }
+    }
+
+    return $show;
+}
+
+function getNavbarButton($roleId = null)
+{
+    if (empty($roleId)) {
+        $roleId = \App\Models\Role::getUserRoleId();
+    }
+
+    $navButton = \App\Models\NavbarButton::where('role_id', $roleId)->first();
+
+    return $navButton;
+}

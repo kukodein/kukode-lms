@@ -8,6 +8,7 @@ use App\Models\TextLesson;
 use App\Models\TextLessonAttachment;
 use App\Models\Translation\TextLessonTranslation;
 use App\Models\Webinar;
+use App\Models\WebinarChapterItem;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Validator;
@@ -39,6 +40,14 @@ class TextLessonsController extends Controller
 
         $webinar = Webinar::find($data['webinar_id']);
 
+        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
+            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
+            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
+        } else {
+            $data['check_previous_parts'] = false;
+            $data['access_after_day'] = null;
+        }
+
         if (!empty($webinar) and $webinar->canAccess($user)) {
             $lessonsCount = TextLesson::where('creator_id', $user->id)
                 ->where('webinar_id', $data['webinar_id'])
@@ -52,6 +61,8 @@ class TextLessonsController extends Controller
                 'study_time' => $data['study_time'],
                 'accessibility' => $data['accessibility'],
                 'order' => $lessonsCount + 1,
+                'check_previous_parts' => $data['check_previous_parts'],
+                'access_after_day' => $data['access_after_day'],
                 'status' => (!empty($data['status']) and $data['status'] == 'on') ? TextLesson::$Active : TextLesson::$Inactive,
                 'created_at' => time(),
             ]);
@@ -68,6 +79,8 @@ class TextLessonsController extends Controller
 
                 $attachments = $data['attachments'];
                 $this->saveAttachments($textLesson, $attachments);
+
+                WebinarChapterItem::makeItem($user->id, $textLesson->chapter_id, $textLesson->id, WebinarChapterItem::$chapterTextLesson);
             }
 
             return response()->json([
@@ -101,6 +114,14 @@ class TextLessonsController extends Controller
             ], 422);
         }
 
+        if (!empty($data['sequence_content']) and $data['sequence_content'] == 'on') {
+            $data['check_previous_parts'] = (!empty($data['check_previous_parts']) and $data['check_previous_parts'] == 'on');
+            $data['access_after_day'] = !empty($data['access_after_day']) ? $data['access_after_day'] : null;
+        } else {
+            $data['check_previous_parts'] = false;
+            $data['access_after_day'] = null;
+        }
+
         $webinar = Webinar::find($data['webinar_id']);
 
         if (!empty($webinar) and $webinar->canAccess($user)) {
@@ -114,6 +135,8 @@ class TextLessonsController extends Controller
                     'image' => $data['image'],
                     'study_time' => $data['study_time'],
                     'accessibility' => $data['accessibility'],
+                    'check_previous_parts' => $data['check_previous_parts'],
+                    'access_after_day' => $data['access_after_day'],
                     'status' => (!empty($data['status']) and $data['status'] == 'on') ? TextLesson::$Active : TextLesson::$Inactive,
                     'updated_at' => time(),
                 ]);
@@ -150,6 +173,11 @@ class TextLessonsController extends Controller
             ->first();
 
         if (!empty($textLesson)) {
+            WebinarChapterItem::where('user_id', $textLesson->creator_id)
+                ->where('item_id', $textLesson->id)
+                ->where('type', WebinarChapterItem::$chapterTextLesson)
+                ->delete();
+
             $textLesson->delete();
         }
 

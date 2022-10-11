@@ -5,23 +5,47 @@ namespace App\Http\Controllers\Panel;
 use App\Http\Controllers\Controller;
 use App\Models\Noticeboard;
 use App\Models\NoticeboardStatus;
+use App\Models\Webinar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class NoticeboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $user = auth()->user();
 
-        if ($user->isOrganization()) {
-            $noticeboards = Noticeboard::where('organ_id', $user->id)
-                ->orderBy('created_at', 'desc')
-                ->paginate(10);
+        if ($user->isOrganization() || $user->isTeacher()) {
+
+            $query = Noticeboard::where(function ($query) use ($user) {
+                $query->where('organ_id', $user->id)
+                    ->orWhere('instructor_id', $user->id);
+            });
+
+            $totalNoticeboards = deepClone($query)->count();
+            $totalCourseNotices = deepClone($query)
+                ->whereNotNull('webinar_id')
+                ->count();
+            $totalGeneralNotices = $totalNoticeboards - $totalCourseNotices;
+
+
+            $noticeboards = $this->handleFilters($request, $query)->orderBy('created_at', 'desc')->paginate(10);
+
+            $webinars = Webinar::select('id')
+                ->where('status', Webinar::$active)
+                ->where(function ($query) use ($user) {
+                    $query->where('creator_id', $user->id);
+                    $query->orWhere('teacher_id', $user->id);
+                })
+                ->get();
 
             $data = [
                 'pageTitle' => trans('panel.noticeboards'),
-                'noticeboards' => $noticeboards
+                'noticeboards' => $noticeboards,
+                'webinars' => $webinars,
+                'totalNoticeboards' => $totalNoticeboards,
+                'totalCourseNotices' => $totalCourseNotices,
+                'totalGeneralNotices' => $totalGeneralNotices,
             ];
 
             return view(getTemplate() . '.panel.noticeboard.index', $data);
@@ -30,13 +54,46 @@ class NoticeboardController extends Controller
         abort(404);
     }
 
+    public function handleFilters(Request $request, $query)
+    {
+        $from = $request->get('from');
+        $to = $request->get('to');
+        $webinarId = $request->get('webinar_id');
+        $title = $request->get('title');
+
+        // $from and $to
+        $query = fromAndToDateFilter($from, $to, $query, 'created_at');
+
+        if (!empty($webinarId)) {
+            $query->where('webinar_id', $webinarId);
+        }
+
+        if (!empty($title)) {
+            $query->where('title', 'like', "%$title%");
+        }
+
+        return $query;
+    }
+
     public function create()
     {
         $user = auth()->user();
 
-        if ($user->isOrganization()) {
+        if ($user->isOrganization() || $user->isTeacher()) {
+
+            if ($user->isTeacher()) {
+                $webinars = Webinar::select('id')
+                    ->where('status', Webinar::$active)
+                    ->where(function ($query) use ($user) {
+                        $query->where('creator_id', $user->id);
+                        $query->orWhere('teacher_id', $user->id);
+                    })
+                    ->get();
+            }
+
             $data = [
                 'pageTitle' => trans('panel.new_noticeboard'),
+                'webinars' => $webinars ?? null,
             ];
 
             return view(getTemplate() . '.panel.noticeboard.create', $data);
@@ -49,13 +106,14 @@ class NoticeboardController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->isOrganization()) {
+        if ($user->isOrganization() || $user->isTeacher()) {
             $data = $request->all();
 
             $validator = Validator::make($data, [
-                'title' => 'required|string',
+                'title' => 'required|string|max:255',
                 'type' => 'required',
                 'message' => 'required',
+                'webinar_id' => 'required_if:type,course'
             ]);
 
             if ($validator->fails()) {
@@ -65,14 +123,23 @@ class NoticeboardController extends Controller
                 ], 422);
             }
 
-            Noticeboard::create([
-                'organ_id' => $user->id,
+            $storeData = [
                 'type' => $data['type'],
                 'sender' => $user->full_name,
                 'title' => $data['title'],
                 'message' => $data['message'],
                 'created_at' => time()
-            ]);
+            ];
+
+            if ($user->isOrganization()) {
+                $storeData['organ_id'] = $user->id;
+            } else {
+                $storeData['type'] = 'students';
+                $storeData['instructor_id'] = $user->id;
+                $storeData['webinar_id'] = $data['webinar_id'] ?? null;
+            }
+
+            Noticeboard::create($storeData);
 
             return response()->json([
                 'code' => 200,
@@ -86,15 +153,29 @@ class NoticeboardController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->isOrganization()) {
-            $noticeboard = Noticeboard::where('organ_id', $user->id)
-                ->where('id', $noticeboard_id)
+        if ($user->isOrganization() || $user->isTeacher()) {
+            $noticeboard = Noticeboard::where(function ($query) use ($user) {
+                $query->where('organ_id', $user->id)
+                    ->orWhere('instructor_id', $user->id);
+            })->where('id', $noticeboard_id)
                 ->first();
 
             if (!empty($noticeboard)) {
+
+                if ($user->isTeacher()) {
+                    $webinars = Webinar::select('id')
+                        ->where('status', Webinar::$active)
+                        ->where(function ($query) use ($user) {
+                            $query->where('creator_id', $user->id);
+                            $query->orWhere('teacher_id', $user->id);
+                        })
+                        ->get();
+                }
+
                 $data = [
                     'pageTitle' => trans('panel.noticeboards'),
-                    'noticeboard' => $noticeboard
+                    'noticeboard' => $noticeboard,
+                    'webinars' => $webinars ?? null,
                 ];
 
                 return view(getTemplate() . '.panel.noticeboard.create', $data);
@@ -108,18 +189,21 @@ class NoticeboardController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->isOrganization()) {
-            $noticeboard = Noticeboard::where('organ_id', $user->id)
-                ->where('id', $noticeboard_id)
+        if ($user->isOrganization() || $user->isTeacher()) {
+            $noticeboard = Noticeboard::where(function ($query) use ($user) {
+                $query->where('organ_id', $user->id)
+                    ->orWhere('instructor_id', $user->id);
+            })->where('id', $noticeboard_id)
                 ->first();
 
             if (!empty($noticeboard)) {
                 $data = $request->all();
 
                 $validator = Validator::make($data, [
-                    'title' => 'required|string',
+                    'title' => 'required|string|max:255',
                     'type' => 'required',
                     'message' => 'required',
+                    'webinar_id' => 'required_if:type,course'
                 ]);
 
                 if ($validator->fails()) {
@@ -129,12 +213,20 @@ class NoticeboardController extends Controller
                     ], 422);
                 }
 
-                $noticeboard->update([
+                $updateData = [
                     'type' => $data['type'],
                     'title' => $data['title'],
                     'message' => $data['message'],
                     'created_at' => time()
-                ]);
+                ];
+
+                if ($user->isTeacher()) {
+                    $updateData['type'] = 'students';
+                    $updateData['instructor_id'] = $user->id;
+                    $updateData['webinar_id'] = $data['webinar_id'] ?? null;
+                }
+
+                $noticeboard->update($updateData);
 
                 NoticeboardStatus::where('noticeboard_id', $noticeboard->id)->delete();
 
@@ -151,9 +243,11 @@ class NoticeboardController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->isOrganization()) {
-            $noticeboard = Noticeboard::where('organ_id', $user->id)
-                ->where('id', $noticeboard_id)
+        if ($user->isOrganization() || $user->isTeacher()) {
+            $noticeboard = Noticeboard::where(function ($query) use ($user) {
+                $query->where('organ_id', $user->id)
+                    ->orWhere('instructor_id', $user->id);
+            })->where('id', $noticeboard_id)
                 ->first();
 
             if (!empty($noticeboard)) {

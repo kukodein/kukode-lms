@@ -6,13 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 
 class Comment extends Model
 {
+    protected $table = 'comments';
     public $timestamps = false;
+    protected $dateFormat = 'U';
+    protected $guarded = ['id'];
 
     static $pending = 'pending';
     static $active = 'active';
 
-
-    protected $guarded = ['id'];
 
     public function replies()
     {
@@ -37,5 +38,10 @@ class Comment extends Model
     public function blog()
     {
         return $this->belongsTo('App\Models\Blog', 'blog_id', 'id');
+    }
+
+    public function product()
+    {
+        return $this->belongsTo('App\Models\Product', 'product_id', 'id');
     }
 }

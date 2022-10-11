@@ -29,7 +29,7 @@ class WebinarReviewController extends Controller
             ->first();
 
         if (!empty($webinar)) {
-            if ($webinar->checkUserHasBought($user)) {
+            if ($webinar->checkUserHasBought($user, false)) {
                 $webinarReview = WebinarReview::where('creator_id', $user->id)
                     ->where('webinar_id', $webinar->id)
                     ->first();
@@ -66,7 +66,7 @@ class WebinarReviewController extends Controller
                 $notifyOptions = [
                     '[c.title]' => $webinar->title,
                     '[student.name]' => $user->full_name,
-                    '[rate.count]' => $rates / 4
+                    '[rate.count]' => $rates > 0 ? $rates / 4 : 0
                 ];
                 sendNotification('new_rating', $notifyOptions, $webinar->teacher_id);
 

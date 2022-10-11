@@ -7,10 +7,9 @@ use App\Models\Quiz;
 use App\Models\Reward;
 use App\Models\RewardAccounting;
 use App\Models\Role;
-use App\Models\Translation\QuizQuestionTranslation;
 use App\Models\Translation\QuizTranslation;
-use App\Models\Translation\QuizzesQuestionsAnswerTranslation;
 use App\Models\WebinarChapter;
+use App\Models\WebinarChapterItem;
 use App\User;
 use App\Models\Webinar;
 use App\Models\QuizzesResult;
@@ -123,12 +122,10 @@ class QuizController extends Controller
 
         $locale = $request->get('locale', app()->getLocale());
 
-        $webinarController = new WebinarController();
-
         $data = [
             'pageTitle' => trans('quiz.new_quiz_page_title'),
             'webinars' => $webinars,
-            'userLanguages' => $webinarController->getUserLanguagesLists(),
+            'userLanguages' => getUserLanguagesLists(),
             'locale' => mb_strtolower($locale),
             'defaultLocale' => getDefaultLocale(),
         ];
@@ -196,6 +193,10 @@ class QuizController extends Controller
             ], [
                 'title' => $data['title'],
             ]);
+
+            if (!empty($quiz->chapter_id)) {
+                WebinarChapterItem::makeItem($user->id, $quiz->chapter_id, $quiz->id, WebinarChapterItem::$chapterQuiz);
+            }
         }
 
         if ($request->ajax()) {
@@ -240,15 +241,13 @@ class QuizController extends Controller
 
             $locale = $request->get('locale', app()->getLocale());
 
-            $webinarController = new WebinarController();
-
             $data = [
                 'pageTitle' => trans('public.edit') . ' ' . $quiz->title,
                 'webinars' => $webinars,
                 'quiz' => $quiz,
                 'quizQuestions' => $quiz->quizQuestions,
                 'chapters' => $chapters,
-                'userLanguages' => $webinarController->getUserLanguagesLists(),
+                'userLanguages' => getUserLanguagesLists(),
                 'locale' => mb_strtolower($locale),
                 'defaultLocale' => getDefaultLocale(),
             ];
@@ -311,6 +310,24 @@ class QuizController extends Controller
             'updated_at' => time(),
         ]);
 
+
+        $checkChapterItem = WebinarChapterItem::where('user_id', $user->id)
+            ->where('item_id', $quiz->id)
+            ->where('type', WebinarChapterItem::$chapterQuiz)
+            ->first();
+
+        if (!empty($quiz->chapter_id)) {
+            if (empty($checkChapterItem)) {
+                WebinarChapterItem::makeItem($user->id, $quiz->chapter_id, $quiz->id, WebinarChapterItem::$chapterQuiz);
+            } elseif ($checkChapterItem->chapter_id != $quiz->chapter_id) {
+                $checkChapterItem->delete(); // remove quiz from old chapter and assign it to new chapter
+
+                WebinarChapterItem::makeItem($user->id, $quiz->chapter_id, $quiz->id, WebinarChapterItem::$chapterQuiz);
+            }
+        } else if (!empty($checkChapterItem)) {
+            $checkChapterItem->delete();
+        }
+
         QuizTranslation::updateOrCreate([
             'quiz_id' => $quiz->id,
             'locale' => mb_strtolower($data['locale']),
@@ -335,11 +352,21 @@ class QuizController extends Controller
             ->first();
 
         if (!empty($quiz)) {
-            $quiz->delete();
 
-            return response()->json([
-                'code' => 200
-            ], 200);
+            if ($quiz->delete()) {
+                $checkChapterItem = WebinarChapterItem::where('user_id', $user_id)
+                    ->where('item_id', $id)
+                    ->where('type', WebinarChapterItem::$chapterQuiz)
+                    ->first();
+
+                if (!empty($checkChapterItem)) {
+                    $checkChapterItem->delete();
+                }
+
+                return response()->json([
+                    'code' => 200
+                ], 200);
+            }
         }
 
         return response()->json([], 422);
@@ -475,6 +502,11 @@ class QuizController extends Controller
                     if ($quizResult->status == QuizzesResult::$passed) {
                         $passTheQuizReward = RewardAccounting::calculateScore(Reward::PASS_THE_QUIZ);
                         RewardAccounting::makeRewardAccounting($quizResult->user_id, $passTheQuizReward, Reward::PASS_THE_QUIZ, $quiz->id, true);
+
+                        if ($quiz->certificate) {
+                            $certificateReward = RewardAccounting::calculateScore(Reward::CERTIFICATE);
+                            RewardAccounting::makeRewardAccounting($quizResult->user_id, $certificateReward, Reward::CERTIFICATE, $quiz->id, true);
+                        }
                     }
 
                     return redirect()->route('quiz_status', ['quizResultId' => $quizResult]);
@@ -871,6 +903,11 @@ class QuizController extends Controller
                     if ($quizResult->status == QuizzesResult::$passed) {
                         $passTheQuizReward = RewardAccounting::calculateScore(Reward::PASS_THE_QUIZ);
                         RewardAccounting::makeRewardAccounting($quizResult->user_id, $passTheQuizReward, Reward::PASS_THE_QUIZ, $quizResult->id, true);
+
+                        if ($quiz->certificate) {
+                            $certificateReward = RewardAccounting::calculateScore(Reward::CERTIFICATE);
+                            RewardAccounting::makeRewardAccounting($quizResult->user_id, $certificateReward, Reward::CERTIFICATE, $quiz->id, true);
+                        }
                     }
 
                     return redirect('panel/quizzes/results');

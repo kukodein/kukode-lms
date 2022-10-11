@@ -166,7 +166,6 @@ class BlogController extends Controller
 
         $post->update([
             'category_id' => $data['category_id'],
-            'author_id' => auth()->id(),
             'image' => $data['image'],
             'enable_comment' => (!empty($data['enable_comment']) and $data['enable_comment'] == 'on'),
             'status' => (!empty($data['status']) and $data['status'] == 'on') ? 'publish' : 'pending',
@@ -185,6 +184,13 @@ class BlogController extends Controller
         ]);
 
         removeContentLocale();
+
+        if ($post->status == 'publish' and $post->author_id != auth()->id()) {
+            $notifyOptions = [
+                '[blog_title]' => $post->title,
+            ];
+            sendNotification('publish_instructor_blog_post', $notifyOptions, $post->author_id);
+        }
 
         return redirect('/admin/blog');
     }

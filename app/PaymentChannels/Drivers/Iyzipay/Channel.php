@@ -10,12 +10,11 @@ use Illuminate\Support\Facades\Auth;
 use Iyzipay\Model\Buyer;
 use Iyzipay\Model\Locale;
 use Iyzipay\Model\PaymentGroup;
-use Iyzipay\Request\CreateCheckoutFormInitializeRequest;
+use Iyzipay\Model\PayWithIyzicoInitialize;
+use Iyzipay\Request\CreatePayWithIyzicoInitializeRequest;
 use Iyzipay\Model\Address;
 use Iyzipay\Model\BasketItem;
 use Iyzipay\Model\BasketItemType;
-use Iyzipay\Model\CheckoutFormInitialize;
-use Iyzipay\Model\Currency;
 use Iyzipay\Options;
 
 class Channel implements IChannel
@@ -24,6 +23,8 @@ class Channel implements IChannel
     protected $api_key;
     protected $api_secret;
     protected $IOptions;
+    protected $locale;
+    protected $order_session_key;
 
     /**
      * Channel constructor.
@@ -32,6 +33,9 @@ class Channel implements IChannel
     public function __construct(PaymentChannel $paymentChannel)
     {
         $this->currency = currency(); // \Iyzipay\Model\Currency;
+        $this->order_session_key = 'iyzipay.payments.order_id';
+
+        $this->locale = Locale::EN;
         $this->api_key = env('IYZIPAY_API_KEY');
         $this->api_secret = env('IYZIPAY_API_SECRET');
 
@@ -46,14 +50,15 @@ class Channel implements IChannel
         $generalSettings = getGeneralSettings();
         $user = $order->user;
 
-        $IForm = new CreateCheckoutFormInitializeRequest();
-        $IForm->setLocale(Locale::EN);
+
+        $IForm = new CreatePayWithIyzicoInitializeRequest();
+        $IForm->setLocale($this->locale);
         $IForm->setConversationId($order->id);
         $IForm->setPrice($order->total_amount);
         $IForm->setPaidPrice($order->total_amount);
         $IForm->setCurrency($this->currency);
         $IForm->setBasketId($user->id);
-        $IForm->setPaymentGroup(PaymentGroup::PRODUCT);
+        $IForm->setPaymentGroup(PaymentGroup::SUBSCRIPTION);
         $IForm->setCallbackUrl($this->makeCallbackUrl($order->id));
         $IForm->setEnabledInstallments(array(2, 3, 6, 9));
 
@@ -93,24 +98,17 @@ class Channel implements IChannel
         $FBasketItems = new BasketItem();
         $FBasketItems->setId($order->id);
         $FBasketItems->setName($generalSettings['site_name'] . ' payment');
-        $FBasketItems->setCategory1($generalSettings['site_name'] . ' payment');
-        $FBasketItems->setItemType(BasketItemType::PHYSICAL);
+        $FBasketItems->setCategory1($generalSettings['site_name'] . ' payment category');
+        $FBasketItems->setItemType(BasketItemType::VIRTUAL);
         $FBasketItems->setPrice($order->total_amount);
 
         $IForm->setBasketItems([$FBasketItems]);
 
+        session()->put($this->order_session_key, $order->id);
 
-        $checkoutFormInitialize = new CheckoutFormInitialize();
-        $getFormContent = $checkoutFormInitialize::create($IForm, $this->IOptions)->getCheckoutFormContent();
+        $payWithIyzicoInitialize = PayWithIyzicoInitialize::create($IForm, $this->IOptions);
 
-
-        if (!empty($getFormContent)) {
-            session()->put('iyzipay.payments.order_id', $order->id);
-
-            return $getFormContent;
-        }
-
-        return $this->getErrorToast();
+        return $payWithIyzicoInitialize; // return for redirection
     }
 
     private function makeCallbackUrl($order_id)
@@ -125,49 +123,47 @@ class Channel implements IChannel
 
     public function verify(Request $request)
     {
+        $orderId = session()->get($this->order_session_key, null);
+        session()->forget($this->order_session_key);
+
         $token = $request->get('token');
-        $orderId = $request->get('order_id');
 
         $order = null;
 
 
         if (!empty($token)) {
 
-            $request = new \Iyzipay\Request\RetrieveCheckoutFormRequest();
-            $request->setLocale(\Iyzipay\Model\Locale::TR);
+            $request = new \Iyzipay\Request\RetrievePayWithIyzicoRequest();
+            $request->setLocale($this->locale);
             $request->setConversationId($orderId);
             $request->setToken($token);
 
-            $checkoutForm = \Iyzipay\Model\CheckoutForm::retrieve($request, $this->IOptions);
+            $checkoutForm = \Iyzipay\Model\PayWithIyzico::retrieve($request, $this->IOptions);
 
             $buyerId = $checkoutForm->getBasketId();
 
             $order = Order::where('id', $orderId)
-                ->where('user_id',$buyerId)
+                ->where('user_id', $buyerId)
                 ->first();
 
             if (!empty($order)) {
+                $orderStatus = Order::$fail;
+
                 Auth::loginUsingId($buyerId);
 
                 $status = $checkoutForm->getStatus();
 
                 if ($status == 'success') {
-                    $order->update([
-                        'status' => Order::$paying
-                    ]);
-
-                    return $order;
+                    $orderStatus = Order::$paying;
                 }
+
+                $order->update([
+                    'status' => $orderStatus,
+                ]);
             }
         }
 
-        if (!empty($order)) {
-            $order->update([
-                'status' => Order::$fail
-            ]);
-        }
-
-        return $this->getErrorToast();
+        return $order;
     }
 
     public function getErrorToast()

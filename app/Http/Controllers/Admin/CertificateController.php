@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exports\CertificatesExport;
 use App\Http\Controllers\Controller;
+use App\Mixins\Certificate\MakeCertificate;
 use App\Models\Certificate;
+use App\Models\QuizzesResult;
 use App\Models\Translation\CertificateTemplateTranslation;
 use App\User;
 use App\Models\Quiz;
@@ -19,7 +21,7 @@ class CertificateController extends Controller
     {
         $this->authorize('admin_certificate_list');
 
-        $query = Certificate::query();
+        $query = Certificate::whereNull('webinar_id');
 
         $query = $this->filters($query, $request);
 
@@ -121,6 +123,7 @@ class CertificateController extends Controller
             'title' => 'required',
             'image' => 'required',
             'body' => 'required',
+            'type' => 'required|in:quiz,course',
             'position_x' => 'required',
             'position_y' => 'required',
             'font_size' => 'required',
@@ -132,6 +135,7 @@ class CertificateController extends Controller
 
         if ($data['status'] and $data['status'] == 'publish') { // set draft for other templates
             CertificateTemplate::where('status', 'publish')
+                ->where('type', $data['type'])
                 ->update([
                     'status' => 'draft'
                 ]);
@@ -142,21 +146,23 @@ class CertificateController extends Controller
             $template = CertificateTemplate::findOrFail($template_id);
             $template->update([
                 'image' => $data['image'],
+                'status' => $data['status'],
+                'type' => $data['type'],
                 'position_x' => $data['position_x'],
                 'position_y' => $data['position_y'],
                 'font_size' => $data['font_size'],
                 'text_color' => $data['text_color'],
-                'status' => $data['status'],
                 'updated_at' => time(),
             ]);
         } else {
             $template = CertificateTemplate::create([
                 'image' => $data['image'],
+                'status' => $data['status'],
+                'type' => $data['type'],
                 'position_x' => $data['position_x'],
                 'position_y' => $data['position_y'],
                 'font_size' => $data['font_size'],
                 'text_color' => $data['text_color'],
-                'status' => $data['status'],
                 'created_at' => time(),
             ]);
         }
@@ -172,7 +178,7 @@ class CertificateController extends Controller
 
         removeContentLocale();
 
-        return back();
+        return redirect('/admin/certificates/templates');
     }
 
     public function CertificatesTemplatePreview(Request $request)
@@ -180,6 +186,7 @@ class CertificateController extends Controller
         $this->authorize('admin_certificate_template_create');
 
         $data = [
+            'pageTitle' => trans('public.certificate'),
             'image' => $request->get('image'),
             'body' => $request->get('body'),
             'position_x' => (int)$request->get('position_x', 120),
@@ -188,12 +195,18 @@ class CertificateController extends Controller
             'text_color' => $request->get('text_color', '#e1e1e1'),
         ];
 
-        $isRtl = $request->get('rtl',false);
+        $isRtl = $request->get('rtl', false);
 
         $body = str_replace('[student]', 'student name', $data['body']);
         $body = str_replace('[course]', 'course name', $body);
         $body = str_replace('[grade]', 'xx', $body);
         $body = str_replace('[certificate_id]', 'xx', $body);
+        $body = str_replace('[user_certificate_additional]', 'xx', $body);
+        $body = str_replace('[date]', 'xx', $body);
+        $body = str_replace('[instructor_name]', 'xx', $body);
+        $body = str_replace('[duration]', 'xx', $body);
+
+        //$data['body'] = $body;//mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');;
 
         if ($isRtl) {
             $Arabic = new \I18N_Arabic('Glyphs');
@@ -203,8 +216,8 @@ class CertificateController extends Controller
         $imgPath = public_path($data['image']);
         $img = Image::make($imgPath);
 
-        $img->text($body, $data['position_x'], $data['position_y'], function ($font) use ($data) {
-            $font->file(public_path('assets/default/fonts/vazir/Vazir-Medium.ttf'));
+        $img->text($body, $data['position_x'], $data['position_y'], function ($font) use ($data, $isRtl) {
+            $font->file($isRtl ? public_path('assets/default/fonts/vazir/Vazir-Medium.ttf') : public_path('assets/default/fonts/Montserrat-Medium.ttf'));
             $font->size($data['font_size']);
             $font->color($data['text_color']);
         });
@@ -242,10 +255,23 @@ class CertificateController extends Controller
     {
         $certificate = Certificate::findOrFail($id);
 
-        if (!empty($certificate->file)) {
-            if (file_exists(public_path($certificate->file))) {
-                return response()->download(public_path($certificate->file));
-            }
+        $makeCertificate = new MakeCertificate();
+
+        if ($certificate->type == 'quiz') {
+            $quizResult = QuizzesResult::where('id', $certificate->quiz_result_id)
+                ->where('status', QuizzesResult::$passed)
+                ->with([
+                    'quiz' => function ($query) {
+                        $query->with(['webinar']);
+                    },
+                    'user'
+                ])
+                ->first();
+
+            return $makeCertificate->makeQuizCertificate($quizResult);
+        } else if ($certificate->type == 'course') {
+
+            return $makeCertificate->makeCourseCertificate($certificate);
         }
 
         abort(404);
